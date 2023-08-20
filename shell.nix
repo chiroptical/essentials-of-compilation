@@ -1,10 +1,15 @@
-{pkgs, snail-shell, ...}:
+{
+  pkgs,
+  snail-shell,
+  ...
+}:
 pkgs.mkShell {
   inputsFrom = [
-    (import ./essentialsOfCompilation.nix { 
+    (import ./essentialsOfCompilation.nix {
       inherit pkgs;
       inherit snail-shell;
-    }).env
+    })
+    .env
   ];
   buildInputs = with pkgs; [
     haskellPackages.cabal-install
@@ -19,4 +24,3 @@ pkgs.mkShell {
   withHoogle = true;
   LANG = "en_US.utf8";
 }
-

@@ -1,4 +1,8 @@
-{pkgs, snail-shell, ...}:
+{
+  pkgs,
+  snail-shell,
+  ...
+}:
 # let aeson = pkgs.callPackage ./nix/aeson.nix {};
 # in
 pkgs.haskell.packages.ghc94.extend (final: prev: {
