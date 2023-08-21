@@ -6,10 +6,13 @@ cabal-version: 1.12
 
 name:           essentialsOfCompilation
 version:        0.0.1
+license:        MIT
+license-file:   LICENSE
 build-type:     Simple
 
 library
   exposed-modules:
+      Chapter1
       Lib
   other-modules:
       Paths_essentialsOfCompilation
@@ -17,6 +20,7 @@ library
       src
   default-extensions:
       DeriveGeneric
+      DerivingStrategies
       ImportQualifiedPost
       LambdaCase
       OverloadedStrings
@@ -25,6 +29,8 @@ library
   build-depends:
       base >=4.7 && <5
     , snail-shell
+    , text
+    , transformers
   default-language: Haskell2010
 
 executable essentialsOfCompilation
@@ -35,6 +41,7 @@ executable essentialsOfCompilation
       app
   default-extensions:
       DeriveGeneric
+      DerivingStrategies
       ImportQualifiedPost
       LambdaCase
       OverloadedStrings
@@ -45,6 +52,8 @@ executable essentialsOfCompilation
       base >=4.7 && <5
     , essentialsOfCompilation
     , snail-shell
+    , text
+    , transformers
   default-language: Haskell2010
 
 test-suite essentialsOfCompilation-test
@@ -56,6 +65,7 @@ test-suite essentialsOfCompilation-test
       test
   default-extensions:
       DeriveGeneric
+      DerivingStrategies
       ImportQualifiedPost
       LambdaCase
       OverloadedStrings
@@ -66,4 +76,6 @@ test-suite essentialsOfCompilation-test
     , essentialsOfCompilation
     , hspec
     , snail-shell
+    , text
+    , transformers
   default-language: Haskell2010

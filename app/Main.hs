@@ -1,7 +1,7 @@
 module Main where
 
-import Lib
+import Chapter1 qualified as Chapter1
 
 main :: IO ()
 main = do
-  putStrLn packageName
+  Chapter1.main

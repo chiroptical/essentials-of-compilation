@@ -4,9 +4,12 @@ version: "0.0.1"
 dependencies:
 - base >= 4.7 && < 5
 - snail-shell
+- text
+- transformers
 
 default-extensions:
 - DeriveGeneric
+- DerivingStrategies
 - ImportQualifiedPost
 - LambdaCase
 - OverloadedStrings
