@@ -1,11 +1,15 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Chapter1 where
 
-import Control.Monad (forM, forM_)
-import Control.Monad.Trans.Except
+import Control.Monad
+import Control.Monad.Except
+import Control.Monad.Log
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Debug.Trace (trace)
+import Prettyprinter
 import Snail.Shell
+import System.IO (stdout)
 import Text.Read (readMaybe)
 
 -- | TODO: Unsure what this is used for yet
@@ -36,44 +40,53 @@ flatten = \case
   (SExpression _ x : rest) -> flatten x <> flatten rest
   other -> error $ show other
 
-parseLexeme :: Text -> Except LangError Ast
+parseLexeme :: (MonadError LangError m) => Text -> m Ast
 parseLexeme = \case
   "read" -> pure Read
   txt ->
     case readMaybe @Integer $ Text.unpack txt of
-      Nothing -> throwE $ UnknownLexeme txt
+      Nothing -> throwError $ UnknownLexeme txt
       Just int -> pure $ AstInt int
 
+logSExpression :: (MonadLog (WithSeverity (Doc ann)) m) => Text -> SExpression -> m ()
+logSExpression msg expr = logInfo . pretty $ msg <> ": " <> toText expr
+
 -- | TODO: Switch to `(MonadLogger m, MonadError m) => m Ast`? Allows me to more easily enable/disable logging.
-fromSnail :: SExpression -> Except LangError Ast
+fromSnail :: (MonadLog (WithSeverity (Doc ann)) m, MonadError LangError m) => SExpression -> m Ast
 fromSnail = \case
   -- no text literals
-  TextLiteral _ -> throwE TextLiteralUnsupported
-  SExpression _ ((TextLiteral _) : _ : _) -> throwE TextLiteralUnsupported
-  -- `read` or `(read)`
-  Lexeme (_, "read") -> pure Read
-  SExpression _ [Lexeme (_, "read")] -> pure Read
-  -- `X` could potentially be an 'AstInt'
+  TextLiteral _ -> throwError TextLiteralUnsupported
+  SExpression _ ((TextLiteral _) : _ : _) -> throwError TextLiteralUnsupported
+  -- `X` could potentially be an 'AstInt' or 'Read'
   Lexeme (_, lexeme) -> parseLexeme lexeme
+  -- `(read)`
+  SExpression _ [Lexeme (_, "read")] -> pure Read
   -- `(- X)` where X is an integer or an S-expression
-  SExpression _ [Lexeme (_, op@"-"), args] -> do
-    operand <- fromSnail args
+  SExpression _ [Lexeme (_, op@"-"), arg] -> do
+    logSExpression "Op -" arg
+    operand <- fromSnail arg
     pure . Negate $ Operation op [operand]
   -- `(+ X Y)` where X and Y are an integer or an S-expression
   SExpression c [Lexeme (_, op@"+"), leftOp, rightOp] -> do
+    logSExpression "Op + Left" leftOp
     left <- fromSnail leftOp
+    logSExpression "Op + Right" rightOp
     right <- fromSnail rightOp
     pure $ Operation op [left, right]
   -- `(program X Y)` where `X` is some information, `Y` is an expression
-  SExpression _ [Lexeme (_, "program"), info, program] ->
-    Program (Info info) <$> fromSnail program
+  SExpression _ [Lexeme (_, "program"), info, body] -> do
+    logSExpression "Program info" info
+    logSExpression "Program body" body
+    Program (Info info) <$> fromSnail body
   -- Empty expressions are invalid
-  SExpression _ [] -> throwE EmptyExpression
+  SExpression _ [] -> throwError EmptyExpression
   -- Any other lexemes are unknown
-  expr@(SExpression _ [Lexeme (_, unknown), _]) ->
-    throwE $ UnknownLexeme unknown
+  expr@(SExpression _ [Lexeme (_, unknown), _]) -> do
+    logSExpression "Unknown expression of lexeme" expr
+    throwError $ UnknownLexeme unknown
   -- expression of expressions
-  SExpression c exprs ->
+  expr@(SExpression c exprs) -> do
+    logSExpression "Expression of expressions: " expr
     fromSnail . SExpression c $ flatten exprs
 
 main :: IO ()
@@ -81,8 +94,10 @@ main = do
   eSExpressions <- readSnailFile "./programs/chapter1.snail"
   case eSExpressions of
     Left err -> print err
-    Right [snailAst] ->
-      let lInt = runExcept $ fromSnail snailAst
-       in putStrLn $ Text.unpack (toText snailAst) <> " ==> " <> show lInt
+    Right [snailAst] -> do
+      lInt <-
+        withFDHandler defaultBatchingOptions stdout 0.4 80 $ \logToStdout ->
+          flip runLoggingT (logToStdout . renderWithSeverity id) $ runExceptT $ fromSnail snailAst
+      putStrLn $ Text.unpack (toText snailAst) <> " ==> " <> show lInt
     Right _ ->
       putStrLn "More than one S-expression is not allows in L(int)"

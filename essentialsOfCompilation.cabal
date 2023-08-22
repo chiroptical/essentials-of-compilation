@@ -28,9 +28,11 @@ library
       TypeApplications
   build-depends:
       base >=4.7 && <5
+    , logging-effect
+    , mtl
+    , prettyprinter
     , snail-shell
     , text
-    , transformers
   default-language: Haskell2010
 
 executable essentialsOfCompilation
@@ -51,9 +53,11 @@ executable essentialsOfCompilation
   build-depends:
       base >=4.7 && <5
     , essentialsOfCompilation
+    , logging-effect
+    , mtl
+    , prettyprinter
     , snail-shell
     , text
-    , transformers
   default-language: Haskell2010
 
 test-suite essentialsOfCompilation-test
@@ -75,7 +79,9 @@ test-suite essentialsOfCompilation-test
       base >=4.7 && <5
     , essentialsOfCompilation
     , hspec
+    , logging-effect
+    , mtl
+    , prettyprinter
     , snail-shell
     , text
-    , transformers
   default-language: Haskell2010
