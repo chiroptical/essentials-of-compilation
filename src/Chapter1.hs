@@ -1,7 +1,9 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Chapter1 where
 
+import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Log
 import Data.Text (Text)
@@ -50,7 +52,6 @@ parseLexeme = \case
 logSExpression :: (MonadLog (WithSeverity (Doc ann)) m) => Text -> SExpression -> m ()
 logSExpression msg expr = logInfo . pretty $ msg <> ": " <> toText expr
 
--- | TODO: Switch to `(MonadLogger m, MonadError m) => m Ast`? Allows me to more easily enable/disable logging.
 fromSnail :: (MonadLog (WithSeverity (Doc ann)) m, MonadError LangError m) => SExpression -> m Ast
 fromSnail = \case
   -- no text literals
@@ -64,7 +65,7 @@ fromSnail = \case
   SExpression _ [Lexeme (_, op@"-"), arg] -> do
     logSExpression "Op -" arg
     operand <- fromSnail arg
-    pure . Negate $ Operation op [operand]
+    pure $ Operation op [Negate operand]
   -- `(+ X Y)` where X and Y are an integer or an S-expression
   SExpression _ [Lexeme (_, op@"+"), leftOp, rightOp] -> do
     logSExpression "Op + Left" leftOp
@@ -88,15 +89,59 @@ fromSnail = \case
     logSExpression "Expression of expressions: " expr
     fromSnail . SExpression c $ flatten exprs
 
+requestInteger :: (MonadIO m) => m Integer
+requestInteger = do
+  liftIO $ putStrLn "Enter an integer"
+  value <- liftIO getLine
+  maybe requestInteger pure $ readMaybe @Integer value
+
+data InterpreterError
+  = InvalidOperation Ast
+  | InvalidProgram Ast
+  deriving stock (Show)
+
+interpreter ::
+  ( MonadLog (WithSeverity (Doc ann)) m
+  , MonadIO m
+  , MonadError InterpreterError m
+  ) =>
+  Ast ->
+  m Integer
+interpreter = \case
+  Negate (AstInt int) -> pure int
+  AstInt int -> pure int
+  Read -> requestInteger
+  Program _ program -> interpreter program
+  ast@(Operation op operands) ->
+    case (op, operands) of
+      ("+", [x, y]) -> (+) <$> interpreter x <*> interpreter y
+      ("-", [x]) -> negate <$> interpreter x
+      _ -> throwError $ InvalidOperation ast
+  ast -> throwError $ InvalidProgram ast
+
+runM ::
+  ( MonadIO m
+  , MonadMask m
+  ) =>
+  ExceptT e (LoggingT (WithSeverity (Doc ann)) m) a ->
+  m (Either e a)
+runM program =
+  withFDHandler defaultBatchingOptions stdout 0.4 80 $ \logToStdout ->
+    flip runLoggingT (logToStdout . renderWithSeverity id) $
+      runExceptT program
+
 main :: IO ()
 main = do
   eSExpressions <- readSnailFile "./programs/chapter1.snail"
   case eSExpressions of
     Left err -> print err
     Right [snailAst] -> do
-      lInt <-
-        withFDHandler defaultBatchingOptions stdout 0.4 80 $ \logToStdout ->
-          flip runLoggingT (logToStdout . renderWithSeverity id) $ runExceptT $ fromSnail snailAst
-      putStrLn $ Text.unpack (toText snailAst) <> " ==> " <> show lInt
+      runM (fromSnail snailAst) >>= \case
+        Left err -> putStrLn $ "Unable to read snail as L(int): " <> show err
+        Right lInt -> do
+          putStrLn $ Text.unpack (toText snailAst) <> " ==> " <> show lInt
+          runM (interpreter lInt) >>= \case
+            Right int -> putStrLn $ "Interpreter result: " <> show int
+            Left err -> putStrLn $ "Interpreter error: " <> show err
     Right _ ->
       putStrLn "More than one S-expression is not allows in L(int)"

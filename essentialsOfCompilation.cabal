@@ -28,6 +28,7 @@ library
       TypeApplications
   build-depends:
       base >=4.7 && <5
+    , exceptions
     , logging-effect
     , mtl
     , prettyprinter
@@ -53,6 +54,7 @@ executable essentialsOfCompilation
   build-depends:
       base >=4.7 && <5
     , essentialsOfCompilation
+    , exceptions
     , logging-effect
     , mtl
     , prettyprinter
@@ -78,6 +80,7 @@ test-suite essentialsOfCompilation-test
   build-depends:
       base >=4.7 && <5
     , essentialsOfCompilation
+    , exceptions
     , hspec
     , logging-effect
     , mtl
