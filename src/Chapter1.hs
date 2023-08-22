@@ -8,7 +8,8 @@ import Debug.Trace (trace)
 import Snail.Shell
 import Text.Read (readMaybe)
 
-newtype Info = Info ()
+-- | TODO: Unsure what this is used for yet
+newtype Info = Info SExpression
   deriving stock (Show)
 
 data LangError
@@ -17,10 +18,11 @@ data LangError
   | UnknownLexeme Text
   deriving stock (Show)
 
+-- | The AST for $\mathcal{L}_\mathrm{int}$
 data Ast
-  = Program SExpression Ast
+  = Program Info Ast
   | AstInt Integer
-  | Magma Text Ast Ast
+  | Operation Text [Ast]
   | Negate Ast
   | Read
   deriving stock (Show)
@@ -53,39 +55,34 @@ fromSnail = \case
   -- `X` could potentially be an 'AstInt'
   Lexeme (_, lexeme) -> parseLexeme lexeme
   -- `(- X)` where X is an integer or an S-expression
-  SExpression _ [Lexeme (_, op@"-"), Lexeme (_, lexeme)] ->
-    Negate <$> parseLexeme lexeme
-  SExpression _ [Lexeme (_, op@"-"), opExpr@SExpression {}] ->
-    let expr = trace ("left " <> show opExpr) $ fromSnail opExpr
-     in Negate <$> expr
-  -- `(+ X Y)` where X, Y is an integer or an S-expression
-  SExpression _ [Lexeme (_, op@"+"), Lexeme (_, leftOp), Lexeme (_, rightOp)] ->
-    Magma op <$> parseLexeme leftOp <*> parseLexeme rightOp
-  SExpression _ [Lexeme (_, op@"+"), Lexeme (_, leftOp), rightOp@SExpression {}] ->
-    Magma op <$> parseLexeme leftOp <*> fromSnail rightOp
-  SExpression _ [Lexeme (_, op@"+"), leftOp@SExpression {}, Lexeme (_, rightOp)] ->
-    Magma op <$> fromSnail leftOp <*> parseLexeme rightOp
-  SExpression _ [Lexeme (_, op@"+"), leftOp@SExpression {}, rightOp@SExpression {}] ->
-    Magma op <$> fromSnail leftOp <*> fromSnail rightOp
-  -- empty expression is not valid arith
+  SExpression _ [Lexeme (_, op@"-"), args] ->
+    Negate . Operation op . pure <$> fromSnail args
+  -- `(+ X Y)` where X and Y are an integer or an S-expression
+  SExpression c [Lexeme (_, op@"+"), leftOp, rightOp] -> do
+    left <- fromSnail leftOp
+    right <- fromSnail rightOp
+    pure $ Operation op [left, right]
+
+  -- `(program X Y)` where `X` is some information, `Y` is an expression
+  SExpression _ [Lexeme (_, "program"), info, program] ->
+    Program (Info info) <$> fromSnail program
+  -- Empty expressions are invalid
   SExpression _ [] -> throwE EmptyExpression
-  -- program
-  SExpression _ [Lexeme (_, "program"), infoExpr@SExpression {}, programExpr@SExpression {}] ->
-    let program = trace ("program " <> show programExpr) $ fromSnail programExpr
-     in Program infoExpr <$> fromSnail programExpr
+  -- Any other lexemes are unknown
   expr@(SExpression _ [Lexeme (_, unknown), _]) ->
     let err = trace ("unknown " <> show expr) $ UnknownLexeme unknown
      in throwE err
   -- expression of expressions
   SExpression c exprs ->
-    let out = trace ("expr " <> show exprs) $ flatten exprs
-     in fromSnail $ SExpression c out
+    fromSnail . SExpression c $ flatten exprs
 
 main :: IO ()
 main = do
   eSExpressions <- readSnailFile "./programs/chapter1.snail"
   case eSExpressions of
     Left err -> print err
-    Right snailAsts -> forM_ snailAsts $ \snail -> do
-      let arith = runExcept $ fromSnail snail
-      putStrLn $ Text.unpack (toText snail) <> " ==> " <> show arith
+    Right [snailAst] ->
+      let lInt = runExcept $ fromSnail snailAst
+       in putStrLn $ Text.unpack (toText snailAst) <> " ==> " <> show lInt
+    Right _ ->
+      putStrLn "More than one S-expression is not allows in L(int)"
