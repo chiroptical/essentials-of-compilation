@@ -55,14 +55,14 @@ fromSnail = \case
   -- `X` could potentially be an 'AstInt'
   Lexeme (_, lexeme) -> parseLexeme lexeme
   -- `(- X)` where X is an integer or an S-expression
-  SExpression _ [Lexeme (_, op@"-"), args] ->
-    Negate . Operation op . pure <$> fromSnail args
+  SExpression _ [Lexeme (_, op@"-"), args] -> do
+    operand <- fromSnail args
+    pure . Negate $ Operation op [operand]
   -- `(+ X Y)` where X and Y are an integer or an S-expression
   SExpression c [Lexeme (_, op@"+"), leftOp, rightOp] -> do
     left <- fromSnail leftOp
     right <- fromSnail rightOp
     pure $ Operation op [left, right]
-
   -- `(program X Y)` where `X` is some information, `Y` is an expression
   SExpression _ [Lexeme (_, "program"), info, program] ->
     Program (Info info) <$> fromSnail program
@@ -70,8 +70,7 @@ fromSnail = \case
   SExpression _ [] -> throwE EmptyExpression
   -- Any other lexemes are unknown
   expr@(SExpression _ [Lexeme (_, unknown), _]) ->
-    let err = trace ("unknown " <> show expr) $ UnknownLexeme unknown
-     in throwE err
+    throwE $ UnknownLexeme unknown
   -- expression of expressions
   SExpression c exprs ->
     fromSnail . SExpression c $ flatten exprs
