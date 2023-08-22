@@ -1,6 +1,6 @@
 module Main where
 
-import Chapter1 qualified as Chapter1
+import Chapter1 qualified
 
 main :: IO ()
 main = do

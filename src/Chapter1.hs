@@ -2,7 +2,6 @@
 
 module Chapter1 where
 
-import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Log
 import Data.Text (Text)
@@ -67,7 +66,7 @@ fromSnail = \case
     operand <- fromSnail arg
     pure . Negate $ Operation op [operand]
   -- `(+ X Y)` where X and Y are an integer or an S-expression
-  SExpression c [Lexeme (_, op@"+"), leftOp, rightOp] -> do
+  SExpression _ [Lexeme (_, op@"+"), leftOp, rightOp] -> do
     logSExpression "Op + Left" leftOp
     left <- fromSnail leftOp
     logSExpression "Op + Right" rightOp
