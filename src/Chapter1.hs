@@ -44,6 +44,7 @@ parseLexeme = \case
       Nothing -> throwE $ UnknownLexeme txt
       Just int -> pure $ AstInt int
 
+-- | TODO: Switch to `(MonadLogger m, MonadError m) => m Ast`? Allows me to more easily enable/disable logging.
 fromSnail :: SExpression -> Except LangError Ast
 fromSnail = \case
   -- no text literals
