@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RankNTypes #-}
 
 module Chapter1 where
 
@@ -23,13 +22,17 @@ data LangError
   | UnknownLexeme Text
   deriving stock (Show)
 
--- | The AST for $\mathcal{L}_\mathrm{int}$
+{- | The AST for $\mathcal{L}_\mathrm{int}$
+
+Both 'AstInt' and 'Read' are leaves of 'Ast', they don't take 'Ast' as an
+argument.
+-}
 data Ast
-  = Program Info Ast
-  | AstInt Integer
+  = AstInt Integer
+  | Read
+  | Program Info Ast
   | Operation Text [Ast]
   | Negate Ast
-  | Read
   deriving stock (Show)
 
 flatten :: [SExpression] -> [SExpression]
@@ -41,8 +44,8 @@ flatten = \case
   (SExpression _ x : rest) -> flatten x <> flatten rest
   other -> error $ show other
 
-parseLexeme :: (MonadError LangError m) => Text -> m Ast
-parseLexeme = \case
+parseLeaf :: (MonadError LangError m) => Text -> m Ast
+parseLeaf = \case
   "read" -> pure Read
   txt ->
     case readMaybe @Integer $ Text.unpack txt of
@@ -54,13 +57,11 @@ logSExpression msg expr = logInfo . pretty $ msg <> ": " <> toText expr
 
 fromSnail :: (MonadLog (WithSeverity (Doc ann)) m, MonadError LangError m) => SExpression -> m Ast
 fromSnail = \case
-  -- no text literals
-  TextLiteral _ -> throwError TextLiteralUnsupported
-  SExpression _ ((TextLiteral _) : _ : _) -> throwError TextLiteralUnsupported
-  -- `X` could potentially be an 'AstInt' or 'Read'
-  Lexeme (_, lexeme) -> parseLexeme lexeme
-  -- `(read)`
-  SExpression _ [Lexeme (_, "read")] -> pure Read
+  -- `X` where `X` is a leaf in 'Ast'
+  Lexeme (_, leaf) -> parseLeaf leaf
+  -- `(X)` where `X` is a leaf in 'Ast'
+  -- 'flatten' can handle, e.g. `((X))` but not `(X)`
+  SExpression _ [Lexeme (_, leaf)] -> parseLeaf leaf
   -- `(- X)` where X is an integer or an S-expression
   SExpression _ [Lexeme (_, op@"-"), arg] -> do
     logSExpression "Op -" arg
@@ -78,13 +79,12 @@ fromSnail = \case
     logSExpression "Program info" info
     logSExpression "Program body" body
     Program (Info info) <$> fromSnail body
-  -- Empty expressions are invalid
+  -- empty expressions are invalid
   SExpression _ [] -> throwError EmptyExpression
-  -- Any other lexemes are unknown
-  expr@(SExpression _ [Lexeme (_, unknown), _]) -> do
-    logSExpression "Unknown expression of lexeme" expr
-    throwError $ UnknownLexeme unknown
-  -- expression of expressions
+  -- no text literals are supported in this language
+  TextLiteral _ -> throwError TextLiteralUnsupported
+  SExpression _ [TextLiteral _] -> throwError TextLiteralUnsupported
+  -- expression of expressions, e.g. `((X))` -> `(X)`
   expr@(SExpression c exprs) -> do
     logSExpression "Expression of expressions: " expr
     fromSnail . SExpression c $ flatten exprs

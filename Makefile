@@ -24,4 +24,7 @@ ghcid: hpack
 hlint: hpack
 	hlint .
 
+clean: hpack
+	cabal clean
+
 .PHONY: build hpack test run format-haskell format-nix format ghcid hlint
