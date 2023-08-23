@@ -35,14 +35,15 @@ data Ast
   | Negate Ast
   deriving stock (Show)
 
+unwrap :: SExpression -> SExpression
+unwrap = \case
+  SExpression _ [x] -> x
+  x -> x
+
 flatten :: [SExpression] -> [SExpression]
 flatten = \case
   [] -> []
-  x@[Lexeme {}] -> x
-  x@[TextLiteral {}] -> x
-  [SExpression _ x] -> x
-  (SExpression _ x : rest) -> flatten x <> flatten rest
-  other -> error $ show other
+  (x : rest) -> unwrap x : (unwrap <$> rest)
 
 parseLeaf :: (MonadError LangError m) => Text -> m Ast
 parseLeaf = \case
@@ -59,9 +60,8 @@ fromSnail :: (MonadLog (WithSeverity (Doc ann)) m, MonadError LangError m) => SE
 fromSnail = \case
   -- `X` where `X` is a leaf in 'Ast'
   Lexeme (_, leaf) -> parseLeaf leaf
-  -- `(X)` where `X` is a leaf in 'Ast'
-  -- 'flatten' can handle, e.g. `((X))` but not `(X)`
-  SExpression _ [Lexeme (_, leaf)] -> parseLeaf leaf
+  -- no text literals are supported in this language
+  TextLiteral _ -> throwError TextLiteralUnsupported
   -- `(- X)` where X is an integer or an S-expression
   SExpression _ [Lexeme (_, op@"-"), arg] -> do
     logSExpression "Op -" arg
@@ -81,13 +81,10 @@ fromSnail = \case
     Program (Info info) <$> fromSnail body
   -- empty expressions are invalid
   SExpression _ [] -> throwError EmptyExpression
-  -- no text literals are supported in this language
-  TextLiteral _ -> throwError TextLiteralUnsupported
-  SExpression _ [TextLiteral _] -> throwError TextLiteralUnsupported
   -- expression of expressions, e.g. `((X))` -> `(X)`
   expr@(SExpression c exprs) -> do
-    logSExpression "Expression of expressions: " expr
-    fromSnail . SExpression c $ flatten exprs
+    logSExpression "Expression of expression" expr
+    fromSnail . unwrap . SExpression c $ flatten exprs
 
 requestInteger :: (MonadIO m) => m Integer
 requestInteger = do
