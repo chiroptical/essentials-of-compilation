@@ -7,7 +7,7 @@ dependencies:
 - logging-effect
 - mtl
 - prettyprinter
-- snail-shell
+- snail
 - text
 
 default-extensions:

@@ -8,12 +8,12 @@ import Control.Monad.Log
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Prettyprinter
-import Snail.Shell
+import Snail
 import System.IO (stdout)
 import Text.Read (readMaybe)
 
 -- | TODO: Unsure what this is used for yet
-newtype Info = Info SExpression
+newtype Info = Info SnailAst
   deriving stock (Show)
 
 data LangError
@@ -35,12 +35,12 @@ data Ast
   | Negate Ast
   deriving stock (Show)
 
-unwrap :: SExpression -> SExpression
+unwrap :: SnailAst -> SnailAst
 unwrap = \case
   SExpression _ [x] -> x
   x -> x
 
-flatten :: [SExpression] -> [SExpression]
+flatten :: [SnailAst] -> [SnailAst]
 flatten = \case
   [] -> []
   (x : rest) -> unwrap x : (unwrap <$> rest)
@@ -53,10 +53,10 @@ parseLeaf = \case
       Nothing -> throwError $ UnknownLexeme txt
       Just int -> pure $ AstInt int
 
-logSExpression :: (MonadLog (WithSeverity (Doc ann)) m) => Text -> SExpression -> m ()
-logSExpression msg expr = logInfo . pretty $ msg <> ": " <> toText expr
+logSnailAst :: (MonadLog (WithSeverity (Doc ann)) m) => Text -> SnailAst -> m ()
+logSnailAst msg expr = logInfo . pretty $ msg <> ": " <> toText expr
 
-fromSnail :: (MonadLog (WithSeverity (Doc ann)) m, MonadError LangError m) => SExpression -> m Ast
+fromSnail :: (MonadLog (WithSeverity (Doc ann)) m, MonadError LangError m) => SnailAst -> m Ast
 fromSnail = \case
   -- `X` where `X` is a leaf in 'Ast'
   Lexeme (_, leaf) -> parseLeaf leaf
@@ -64,26 +64,26 @@ fromSnail = \case
   TextLiteral _ -> throwError TextLiteralUnsupported
   -- `(- X)` where X is an integer or an S-expression
   SExpression _ [Lexeme (_, op@"-"), arg] -> do
-    logSExpression "Op -" arg
+    logSnailAst "Op -" arg
     operand <- fromSnail arg
     pure $ Operation op [Negate operand]
   -- `(+ X Y)` where X and Y are an integer or an S-expression
   SExpression _ [Lexeme (_, op@"+"), leftOp, rightOp] -> do
-    logSExpression "Op + Left" leftOp
+    logSnailAst "Op + Left" leftOp
     left <- fromSnail leftOp
-    logSExpression "Op + Right" rightOp
+    logSnailAst "Op + Right" rightOp
     right <- fromSnail rightOp
     pure $ Operation op [left, right]
   -- `(program X Y)` where `X` is some information, `Y` is an expression
   SExpression _ [Lexeme (_, "program"), info, body] -> do
-    logSExpression "Program info" info
-    logSExpression "Program body" body
+    logSnailAst "Program info" info
+    logSnailAst "Program body" body
     Program (Info info) <$> fromSnail body
   -- empty expressions are invalid
   SExpression _ [] -> throwError EmptyExpression
   -- expression of expressions, e.g. `((X))` -> `(X)`
   expr@(SExpression c exprs) -> do
-    logSExpression "Expression of expression" expr
+    logSnailAst "Expression of expression" expr
     fromSnail . unwrap . SExpression c $ flatten exprs
 
 requestInteger :: (MonadIO m) => m Integer
@@ -132,11 +132,11 @@ main = do
   eSExpressions <- readSnailFile "./programs/chapter1.snail"
   case eSExpressions of
     Left err -> print err
-    Right [snailAst] -> do
-      runM (fromSnail snailAst) >>= \case
+    Right [ast] -> do
+      runM (fromSnail ast) >>= \case
         Left err -> putStrLn $ "Unable to read snail as L(int): " <> show err
         Right lInt -> do
-          putStrLn $ Text.unpack (toText snailAst) <> " ==> " <> show lInt
+          putStrLn $ Text.unpack (toText ast) <> " ==> " <> show lInt
           runM (interpreter lInt) >>= \case
             Right int -> putStrLn $ "Interpreter result: " <> show int
             Left err -> putStrLn $ "Interpreter error: " <> show err
