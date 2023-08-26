@@ -66,6 +66,7 @@ test-suite essentialsOfCompilation-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Chapter1Spec
       Paths_essentialsOfCompilation
   hs-source-dirs:
       test
@@ -78,7 +79,8 @@ test-suite essentialsOfCompilation-test
       RecordWildCards
       TypeApplications
   build-depends:
-      base >=4.7 && <5
+      HUnit
+    , base >=4.7 && <5
     , essentialsOfCompilation
     , exceptions
     , hspec

@@ -14,7 +14,7 @@ import Text.Read (readMaybe)
 
 -- | TODO: Unsure what this is used for yet
 newtype Info = Info SnailAst
-  deriving stock (Show)
+  deriving stock (Eq, Show)
 
 data LangError
   = TextLiteralUnsupported
@@ -32,8 +32,7 @@ data Ast
   | Read
   | Program Info Ast
   | Operation Text [Ast]
-  | Negate Ast
-  deriving stock (Show)
+  deriving stock (Eq, Show)
 
 unwrap :: SnailAst -> SnailAst
 unwrap = \case
@@ -66,7 +65,7 @@ fromSnail = \case
   SExpression _ [Lexeme (_, op@"-"), arg] -> do
     logSnailAst "Op -" arg
     operand <- fromSnail arg
-    pure $ Operation op [Negate operand]
+    pure $ Operation op [operand]
   -- `(+ X Y)` where X and Y are an integer or an S-expression
   SExpression _ [Lexeme (_, op@"+"), leftOp, rightOp] -> do
     logSnailAst "Op + Left" leftOp
@@ -95,7 +94,7 @@ requestInteger = do
 data InterpreterError
   = InvalidOperation Ast
   | InvalidProgram Ast
-  deriving stock (Show)
+  deriving stock (Eq, Show)
 
 interpreter ::
   ( MonadLog (WithSeverity (Doc ann)) m
@@ -105,7 +104,6 @@ interpreter ::
   Ast ->
   m Integer
 interpreter = \case
-  Negate (AstInt int) -> pure int
   AstInt int -> pure int
   Read -> requestInteger
   Program _ program -> interpreter program
@@ -114,7 +112,12 @@ interpreter = \case
       ("+", [x, y]) -> (+) <$> interpreter x <*> interpreter y
       ("-", [x]) -> negate <$> interpreter x
       _ -> throwError $ InvalidOperation ast
-  ast -> throwError $ InvalidProgram ast
+
+partialEvaluation :: Ast -> Ast
+partialEvaluation = \case
+  Operation "+" [AstInt x, AstInt y] -> AstInt $ x + y
+  Operation "-" [AstInt x] -> AstInt $ negate x
+  x -> x
 
 runM ::
   ( MonadIO m
