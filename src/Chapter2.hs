@@ -1,27 +1,17 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Chapter1 where
+module Chapter2 where
 
 import Control.Monad.Except
 import Control.Monad.Log
+import Data.Functor (($>))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Prettyprinter
-import RunM
 import Snail
 import Text.Read (readMaybe)
 
--- | TODO: Unsure what this is used for yet
-newtype Info = Info SnailAst
-  deriving stock (Eq, Show)
-
-data LangError
-  = TextLiteralUnsupported
-  | EmptyExpression
-  | UnknownLexeme Text
-  deriving stock (Show)
-
-{- | The AST for $\mathcal{L}_\mathrm{int}$
+{- | The AST for $\mathcal{L}_\mathrm{var}$
 
 Both 'AstInt' and 'Read' are leaves of 'Ast', they don't take 'Ast' as an
 argument.
@@ -31,17 +21,24 @@ data Ast
   | Read
   | Program Info Ast
   | Operation Text [Ast]
+  | Let Text Ast Ast
   deriving stock (Eq, Show)
+
+-- | TODO: Unsure what this is used for yet
+newtype Info = Info SnailAst
+  deriving stock (Eq, Show)
+
+data LangError
+  = TextLiteralUnsupported
+  | EmptyExpression
+  | UnknownLexeme Text
+  | InvalidLetName Text
+  deriving stock (Show)
 
 unwrap :: SnailAst -> SnailAst
 unwrap = \case
   SExpression _ [x] -> x
   x -> x
-
-flatten :: [SnailAst] -> [SnailAst]
-flatten = \case
-  [] -> []
-  (x : rest) -> unwrap x : (unwrap <$> rest)
 
 parseLeaf :: (MonadError LangError m) => Text -> m Ast
 parseLeaf = \case
@@ -50,6 +47,17 @@ parseLeaf = \case
     case readMaybe @Integer $ Text.unpack txt of
       Nothing -> throwError $ UnknownLexeme txt
       Just int -> pure $ AstInt int
+
+-- | TODO: should this only include [a-zA-Z]?
+isValidName :: (MonadError LangError m) => Text -> m Bool
+isValidName txt =
+  catchError
+    ( -- a valid leaf is not a valid let binding
+      parseLeaf txt $> False
+    )
+    ( -- if it throws, we have a valid name
+      const $ pure True
+    )
 
 logSnailAst :: (MonadLog (WithSeverity (Doc ann)) m) => Text -> SnailAst -> m ()
 logSnailAst msg expr = logInfo . pretty $ msg <> ": " <> toText expr
@@ -72,6 +80,15 @@ fromSnail = \case
     logSnailAst "Op + Right" rightOp
     right <- fromSnail rightOp
     pure $ Operation op [left, right]
+  SExpression _ [Lexeme (_, "let"), SExpression _ [Lexeme (_, name), binding], expr] -> do
+    isValidName name >>= \case
+      False -> throwError $ InvalidLetName name
+      True -> do
+        logSnailAst "Let binding" binding
+        bin <- fromSnail binding
+        logSnailAst "Let expr" expr
+        ex <- fromSnail expr
+        pure $ Let name bin ex
   -- `(program X Y)` where `X` is some information, `Y` is an expression
   SExpression _ [Lexeme (_, "program"), info, body] -> do
     logSnailAst "Program info" info
@@ -82,7 +99,7 @@ fromSnail = \case
   -- expression of expressions, e.g. `((X))` -> `(X)`
   expr@(SExpression c exprs) -> do
     logSnailAst "Expression of expression" expr
-    fromSnail . unwrap . SExpression c $ flatten exprs
+    fromSnail . unwrap . SExpression c $ unwrap <$> exprs
 
 requestInteger :: (MonadIO m) => m Integer
 requestInteger = do
@@ -93,6 +110,7 @@ requestInteger = do
 data InterpreterError
   = InvalidOperation Ast
   | InvalidProgram Ast
+  | NotImplementedYet
   deriving stock (Eq, Show)
 
 interpreter ::
@@ -106,30 +124,9 @@ interpreter = \case
   AstInt int -> pure int
   Read -> requestInteger
   Program _ program -> interpreter program
+  Let {} -> throwError NotImplementedYet
   ast@(Operation op operands) ->
     case (op, operands) of
       ("+", [x, y]) -> (+) <$> interpreter x <*> interpreter y
       ("-", [x]) -> negate <$> interpreter x
       _ -> throwError $ InvalidOperation ast
-
-partialEvaluation :: Ast -> Ast
-partialEvaluation = \case
-  Operation "+" [AstInt x, AstInt y] -> AstInt $ x + y
-  Operation "-" [AstInt x] -> AstInt $ negate x
-  x -> x
-
-main :: IO ()
-main = do
-  eSExpressions <- readSnailFile "./programs/chapter1.snail"
-  case eSExpressions of
-    Left err -> print err
-    Right [ast] -> do
-      runM (fromSnail ast) >>= \case
-        Left err -> putStrLn $ "Unable to read snail as L(int): " <> show err
-        Right lInt -> do
-          putStrLn $ Text.unpack (toText ast) <> " ==> " <> show lInt
-          runM (interpreter lInt) >>= \case
-            Right int -> putStrLn $ "Interpreter result: " <> show int
-            Left err -> putStrLn $ "Interpreter error: " <> show err
-    Right _ ->
-      putStrLn "More than one S-expression is not allows in L(int)"
