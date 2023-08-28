@@ -4,7 +4,6 @@ module Chapter2 where
 
 import Control.Monad.Except
 import Control.Monad.Log
-import Data.Functor (($>))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Prettyprinter
@@ -22,6 +21,7 @@ data Ast
   | Program Info Ast
   | Operation Text [Ast]
   | Let Text Ast Ast
+  | Var Text
   deriving stock (Eq, Show)
 
 -- | TODO: Unsure what this is used for yet
@@ -45,19 +45,8 @@ parseLeaf = \case
   "read" -> pure Read
   txt ->
     case readMaybe @Integer $ Text.unpack txt of
-      Nothing -> throwError $ UnknownLexeme txt
+      Nothing -> pure $ Var txt
       Just int -> pure $ AstInt int
-
--- | TODO: should this only include [a-zA-Z]?
-isValidName :: (MonadError LangError m) => Text -> m Bool
-isValidName txt =
-  catchError
-    ( -- a valid leaf is not a valid let binding
-      parseLeaf txt $> False
-    )
-    ( -- if it throws, we have a valid name
-      const $ pure True
-    )
 
 logSnailAst :: (MonadLog (WithSeverity (Doc ann)) m) => Text -> SnailAst -> m ()
 logSnailAst msg expr = logInfo . pretty $ msg <> ": " <> toText expr
@@ -81,14 +70,11 @@ fromSnail = \case
     right <- fromSnail rightOp
     pure $ Operation op [left, right]
   SExpression _ [Lexeme (_, "let"), SExpression _ [Lexeme (_, name), binding], expr] -> do
-    isValidName name >>= \case
-      False -> throwError $ InvalidLetName name
-      True -> do
-        logSnailAst "Let binding" binding
-        bin <- fromSnail binding
-        logSnailAst "Let expr" expr
-        ex <- fromSnail expr
-        pure $ Let name bin ex
+    logSnailAst "Let binding" binding
+    bin <- fromSnail binding
+    logSnailAst "Let expr" expr
+    ex <- fromSnail expr
+    pure $ Let name bin ex
   -- `(program X Y)` where `X` is some information, `Y` is an expression
   SExpression _ [Lexeme (_, "program"), info, body] -> do
     logSnailAst "Program info" info
@@ -100,6 +86,12 @@ fromSnail = \case
   expr@(SExpression c exprs) -> do
     logSnailAst "Expression of expression" expr
     fromSnail . unwrap . SExpression c $ unwrap <$> exprs
+
+data UniquifyError = TODO
+
+-- | Exercise 2.1: Make all variable names unique
+uniquify :: (MonadLog (WithSeverity (Doc ann)) m, MonadError UniquifyError m) => Ast -> m Ast
+uniquify _ = throwError TODO
 
 requestInteger :: (MonadIO m) => m Integer
 requestInteger = do
@@ -125,6 +117,7 @@ interpreter = \case
   Read -> requestInteger
   Program _ program -> interpreter program
   Let {} -> throwError NotImplementedYet
+  Var {} -> throwError NotImplementedYet
   ast@(Operation op operands) ->
     case (op, operands) of
       ("+", [x, y]) -> (+) <$> interpreter x <*> interpreter y

@@ -2,6 +2,7 @@ module Chapter1Spec (spec) where
 
 import Chapter1
 import Data.Text
+import RunM
 import Snail
 import Test.HUnit
 import Test.Hspec
