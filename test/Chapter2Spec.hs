@@ -14,13 +14,13 @@ spec = do
       ast <- snailToAst "(program () (+ (let (x 10) x) 10))"
       ast
         `shouldBe` Program
-          (Info $ SExpression Nothing [])
+          (Info $ SExpression Nothing Round [])
           (Operation "+" [Let "x" (AstInt 10) (Var "x"), AstInt 10])
     it "handles doubly nested let" $ do
       ast <- snailToAst "(program () (let (x 32) (+ (let (x 10) x) x)))"
       ast
         `shouldBe` Program
-          (Info $ SExpression Nothing [])
+          (Info $ SExpression Nothing Round [])
           (Let "x" (AstInt 32) (Operation "+" [Let "x" (AstInt 10) (Var "x"), Var "x"]))
 
 snailToAst :: Text -> IO Ast
