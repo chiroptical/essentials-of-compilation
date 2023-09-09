@@ -21,10 +21,13 @@ format: format-nix format-haskell
 ghcid: hpack
 	ghcid -c "cabal --ghc-options='${GHC_OPTIONS}' repl"
 
+ghcid-test: hpack
+	ghcid -c "cabal --ghc-options='${GHC_OPTIONS}' repl test:essentialsOfCompilation-test"
+
 hlint: hpack
 	hlint .
 
 clean: hpack
 	cabal clean
 
-.PHONY: build hpack test run format-haskell format-nix format ghcid hlint
+.PHONY: build hpack test run format-haskell format-nix format ghcid ghcid-test hlint

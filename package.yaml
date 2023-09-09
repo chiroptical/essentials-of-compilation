@@ -2,7 +2,9 @@ name:    essentialsOfCompilation
 version: "0.0.1"
 
 dependencies:
+- MonadRandom
 - base >= 4.7 && < 5
+- containers
 - exceptions
 - logging-effect
 - mtl

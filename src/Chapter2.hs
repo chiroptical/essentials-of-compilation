@@ -4,6 +4,8 @@ module Chapter2 where
 
 import Control.Monad.Except
 import Control.Monad.Log
+import Control.Monad.Random
+import Control.Monad.Reader
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Prettyprinter
@@ -82,11 +84,34 @@ fromSnail = \case
     logSnailAst "Expression of expression" expr
     fromSnail . unwrap . SExpression c b $ unwrap <$> exprs
 
-data UniquifyError = TODO
+randomChar :: (MonadRandom m) => m Char
+randomChar = getRandomR ('a', 'z')
+
+uniqueVariable :: (MonadRandom m) => m Text
+uniqueVariable = Text.pack <$> replicateM 10 randomChar
 
 -- | Exercise 2.1: Make all variable names unique
-uniquify :: (MonadLog (WithSeverity (Doc ann)) m, MonadError UniquifyError m) => Ast -> m Ast
-uniquify _ = throwError TODO
+uniquify :: (RandomGen g, MonadReader (Text, Text) m, MonadLog (WithSeverity (Doc ann)) m, MonadError LangError m) => Ast -> RandT g m Ast
+uniquify = \case
+  -- Nothing to do with literals
+  x@(AstInt _) -> pure x
+  x@Read -> pure x
+  -- recursive cases, but no uniqueness to deal with
+  Program info ast -> Program info <$> uniquify ast
+  Operation op asts -> Operation op <$> traverse uniquify asts
+  -- recursive cases, uniqueness matters
+  Var x -> do
+    (toReplace, with) <- ask
+    pure . Var $
+      if x == toReplace
+        then with
+        else x
+  Let x expr body -> do
+    uniqueX <- uniqueVariable
+    let localState = (x, uniqueX)
+    uniqueBody <- local (const localState) $ uniquify body
+    uniqueExpr <- uniquify expr
+    pure $ Let uniqueX uniqueExpr uniqueBody
 
 requestInteger :: (MonadIO m) => m Integer
 requestInteger = do

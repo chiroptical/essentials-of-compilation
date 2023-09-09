@@ -29,7 +29,9 @@ library
       RecordWildCards
       TypeApplications
   build-depends:
-      base >=4.7 && <5
+      MonadRandom
+    , base >=4.7 && <5
+    , containers
     , exceptions
     , logging-effect
     , mtl
@@ -54,7 +56,9 @@ executable essentialsOfCompilation
       TypeApplications
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      MonadRandom
+    , base >=4.7 && <5
+    , containers
     , essentialsOfCompilation
     , exceptions
     , logging-effect
@@ -83,7 +87,9 @@ test-suite essentialsOfCompilation-test
       TypeApplications
   build-depends:
       HUnit
+    , MonadRandom
     , base >=4.7 && <5
+    , containers
     , essentialsOfCompilation
     , exceptions
     , hspec
