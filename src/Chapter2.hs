@@ -11,6 +11,8 @@ import Data.Text qualified as Text
 import Prettyprinter
 import Snail
 import Text.Read (readMaybe)
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 
 {- | The AST for $\mathcal{L}_\mathrm{var}$
 
@@ -90,8 +92,10 @@ randomChar = getRandomR ('a', 'z')
 uniqueVariable :: (MonadRandom m) => m Text
 uniqueVariable = Text.pack <$> replicateM 10 randomChar
 
+type RenameMap = Map Text Text
+
 -- | Exercise 2.1: Make all variable names unique
-uniquify :: (RandomGen g, MonadReader (Text, Text) m) => Ast -> RandT g m Ast
+uniquify :: (RandomGen g, MonadReader RenameMap m) => Ast -> RandT g m Ast
 uniquify = \case
   -- Nothing to do with literals
   x@(AstInt _) -> pure x
@@ -101,16 +105,12 @@ uniquify = \case
   Operation op asts -> Operation op <$> traverse uniquify asts
   -- recursive cases, uniqueness matters
   Var x -> do
-    (toReplace, with) <- ask
-    pure . Var $
-      if x == toReplace
-        then with
-        else x
+    renameMap <- ask
+    pure . Var $ Map.findWithDefault x x renameMap
   Let x expr body -> do
     uniqueX <- uniqueVariable
-    let localState = (x, uniqueX)
-    uniqueBody <- local (const localState) $ uniquify body
-    uniqueExpr <- uniquify expr
+    uniqueBody <- local (Map.insert x uniqueX) $ uniquify body
+    uniqueExpr <- local (Map.insert x uniqueX) $ uniquify expr
     pure $ Let uniqueX uniqueExpr uniqueBody
 
 requestInteger :: (MonadIO m) => m Integer

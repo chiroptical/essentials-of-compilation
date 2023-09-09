@@ -50,6 +50,23 @@ spec = do
       -- The inner variables should match
       b `shouldBe` c
 
+    it "handles let nested in expression" $ do
+      ast <- snailToAst "(let (x 5) (let (x 6) (let (y 7) x)))"
+      ast `shouldBe` Let "x" (AstInt 5) (Let "x" (AstInt 6) (Let "y" (AstInt 7) (Var "x")))
+      (a, b, c, d) <-
+        runUniquify ast >>= \case
+          Let a (AstInt 5) (Let b (AstInt 6) (Let c (AstInt 7) (Var d))) -> pure (a, b, c, d)
+          _ -> assertFailure "Unable to parse resulting AST"
+      -- The variables should have new names
+      a `shouldNotBe` "x"
+      b `shouldNotBe` "x"
+      c `shouldNotBe` "y"
+      d `shouldNotBe` "x"
+
+      -- The inner "x" should be the inner let, not the outer one
+      a `shouldNotBe` d
+      b `shouldBe` d
+
 snailToAst :: Text -> IO Ast
 snailToAst input = do
   snail <-
@@ -64,6 +81,6 @@ snailToAst input = do
 runUniquify :: Ast -> IO Ast
 runUniquify ast = do
   let program = evalRandT (uniquify ast) $ mkStdGen 2023
-  runMWith ("", "") program >>= \case
+  runMWith mempty program >>= \case
     Right result -> pure result
     Left _ -> assertFailure "Unable to run uniquify"
