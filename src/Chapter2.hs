@@ -91,7 +91,7 @@ uniqueVariable :: (MonadRandom m) => m Text
 uniqueVariable = Text.pack <$> replicateM 10 randomChar
 
 -- | Exercise 2.1: Make all variable names unique
-uniquify :: (RandomGen g, MonadReader (Text, Text) m, MonadLog (WithSeverity (Doc ann)) m, MonadError LangError m) => Ast -> RandT g m Ast
+uniquify :: (RandomGen g, MonadReader (Text, Text) m) => Ast -> RandT g m Ast
 uniquify = \case
   -- Nothing to do with literals
   x@(AstInt _) -> pure x
