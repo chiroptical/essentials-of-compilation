@@ -23,7 +23,7 @@ spec = do
         `shouldBe` Program
           (Info $ SExpression Nothing Round [])
           (Let "x" (AstInt 32) (Operation "+" [Let "x" (AstInt 10) (Var "x"), Var "x"]))
-  describe "uniquify" $ do
+  describe "Exercise 2.2" $ do
     it "handles singly nested let" $ do
       ast <- snailToAst "(let (x 10) x)"
       ast `shouldBe` Let "x" (AstInt 10) (Var "x")
@@ -33,6 +33,7 @@ spec = do
           _ -> assertFailure "Unable to parse resulting AST"
       x `shouldNotBe` "x"
       x `shouldBe` y
+
     it "handles doubly nested let" $ do
       ast <- snailToAst "(let (x 10) (+ (let (x 10) x) x))"
       ast `shouldBe` Let "x" (AstInt 10) (Operation "+" [Let "x" (AstInt 10) (Var "x"), Var "x"])
@@ -40,6 +41,7 @@ spec = do
         runUniquify ast >>= \case
           Let a (AstInt 10) (Operation "+" [Let b (AstInt 10) (Var c), Var d]) -> pure (a, b, c, d)
           _ -> assertFailure "Unable to parse resulting AST"
+
       -- The variables should be new names
       a `shouldNotBe` "x"
       b `shouldNotBe` "x"
@@ -59,9 +61,12 @@ spec = do
           Let a (AstInt 10) (Let b (AstInt 5) (Operation "+" [Var c, Var d])) -> pure (a, b, c, d)
           _ -> assertFailure "Unable to parse resulting AST"
 
+      -- The variables should have new names
       a `shouldNotBe` "x"
       b `shouldNotBe` "x"
+      -- They should be named differently
       a `shouldNotBe` b
+      -- The latter variable is used in the body
       b `shouldBe` c
       b `shouldBe` d
 
@@ -74,12 +79,15 @@ spec = do
           Let a (AstInt 10) (Let b (Var c) (Operation "+" [Var d, Var e])) -> pure (a, b, c, d, e)
           _ -> assertFailure "Unable to parse resulting AST"
 
+      -- The variables should have new names
       a `shouldNotBe` "x"
       b `shouldNotBe` "y"
+      -- They should be named differently
+      a `shouldNotBe` b
+      -- The variables match their bodies
       a `shouldBe` c
       b `shouldBe` d
       b `shouldBe` e
-      a `shouldNotBe` b
 
     it "handles nested let variable in variable definition" $ do
       ast <- snailToAst "(let (x (let (x 10) x)) x)"
@@ -90,11 +98,14 @@ spec = do
           Let a (Let b (AstInt 10) (Var c)) (Var d) -> pure (a, b, c, d)
           _ -> assertFailure "Unable to parse resulting AST"
 
+      -- The variables should have new names
       a `shouldNotBe` "x"
       b `shouldNotBe` "x"
+      -- They should be named differently
+      b `shouldNotBe` a
+      -- They should match their bodies
       a `shouldBe` d
       b `shouldBe` c
-      b `shouldNotBe` a
 
     it "handles unused let variable in variable definition" $ do
       ast <- snailToAst "(let (x (let (y 10) x)) x)"
@@ -105,10 +116,13 @@ spec = do
           Let a (Let b (AstInt 10) (Var c)) (Var d) -> pure (a, b, c, d)
           _ -> assertFailure "Unable to parse resulting AST"
 
+      -- The variables should have new names
       a `shouldNotBe` "x"
       b `shouldNotBe` "y"
       c `shouldNotBe` "x"
+      -- The x in the definition should be different
       c `shouldNotBe` a
+      -- The correct variable used in the body
       a `shouldBe` d
 
 snailToAst :: Text -> IO Ast
