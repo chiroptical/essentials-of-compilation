@@ -35,8 +35,6 @@ newtype Info = Info SnailAst
 data LangError
   = TextLiteralUnsupported
   | EmptyExpression
-  | UnknownLexeme Text
-  | InvalidLetName Text
   deriving stock (Show)
 
 parseLeaf :: (MonadError LangError m) => Text -> m Ast
