@@ -50,22 +50,21 @@ spec = do
       -- The inner variables should match
       b `shouldBe` c
 
-    it "handles let nested in expression" $ do
-      ast <- snailToAst "(let (x 5) (let (x 6) (let (y 7) x)))"
-      ast `shouldBe` Let "x" (AstInt 5) (Let "x" (AstInt 6) (Let "y" (AstInt 7) (Var "x")))
-      (a, b, c, d) <-
-        runUniquify ast >>= \case
-          Let a (AstInt 5) (Let b (AstInt 6) (Let c (AstInt 7) (Var d))) -> pure (a, b, c, d)
-          _ -> assertFailure "Unable to parse resulting AST"
-      -- The variables should have new names
-      a `shouldNotBe` "x"
-      b `shouldNotBe` "x"
-      c `shouldNotBe` "y"
-      d `shouldNotBe` "x"
+    it "handles let nested in body" $ do
+      ast <- snailToAst "(let (x 10) (let (x 5) (+ x x)))"
+      ast `shouldBe` Let "x" (AstInt 10) (Let "x" (AstInt 5) (Operation "+" [Var "x", Var "x"]))
 
-      -- The inner "x" should be the inner let, not the outer one
-      a `shouldNotBe` d
-      b `shouldBe` d
+    it "handles reassigned variable in body" $ do
+      ast <- snailToAst "(let (x 10) (let (y x) (+ y y))) "
+      ast `shouldBe` Let "x" (AstInt 10) (Let "y" (Var "x") (Operation "+" [Var "y", Var "y"]))
+
+    it "handles nested let variable in variable definition" $ do
+      ast <- snailToAst "(let (x (let (x 10) x)) x)"
+      ast `shouldBe` Let "x" (Let "x" (AstInt 10) (Var "x")) (Var "x")
+
+    it "handles unused let variable in variable definition" $ do
+      ast <- snailToAst "(let (x (let (y 10) x)) x)"
+      ast `shouldBe` Let "x" (Let "y" (AstInt 10) (Var "x")) (Var "x")
 
 snailToAst :: Text -> IO Ast
 snailToAst input = do

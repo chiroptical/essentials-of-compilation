@@ -109,9 +109,10 @@ uniquify = \case
     pure . Var $ Map.findWithDefault x x renameMap
   Let x expr body -> do
     uniqueX <- uniqueVariable
-    uniqueBody <- local (Map.insert x uniqueX) $ uniquify body
-    uniqueExpr <- local (Map.insert x uniqueX) $ uniquify expr
-    pure $ Let uniqueX uniqueExpr uniqueBody
+    local (Map.insert x uniqueX) $ do
+      uniqueBody <- uniquify body
+      uniqueExpr <- uniquify expr
+      pure $ Let uniqueX uniqueExpr uniqueBody
 
 requestInteger :: (MonadIO m) => m Integer
 requestInteger = do
