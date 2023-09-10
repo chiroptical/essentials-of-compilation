@@ -54,17 +54,62 @@ spec = do
       ast <- snailToAst "(let (x 10) (let (x 5) (+ x x)))"
       ast `shouldBe` Let "x" (AstInt 10) (Let "x" (AstInt 5) (Operation "+" [Var "x", Var "x"]))
 
+      (a, b, c, d) <-
+        runUniquify ast >>= \case
+          Let a (AstInt 10) (Let b (AstInt 5) (Operation "+" [Var c, Var d])) -> pure (a, b, c, d)
+          _ -> assertFailure "Unable to parse resulting AST"
+
+      a `shouldNotBe` "x"
+      b `shouldNotBe` "x"
+      a `shouldNotBe` b
+      b `shouldBe` c
+      b `shouldBe` d
+
     it "handles reassigned variable in body" $ do
       ast <- snailToAst "(let (x 10) (let (y x) (+ y y))) "
       ast `shouldBe` Let "x" (AstInt 10) (Let "y" (Var "x") (Operation "+" [Var "y", Var "y"]))
+
+      (a, b, c, d, e) <-
+        runUniquify ast >>= \case
+          Let a (AstInt 10) (Let b (Var c) (Operation "+" [Var d, Var e])) -> pure (a, b, c, d, e)
+          _ -> assertFailure "Unable to parse resulting AST"
+
+      a `shouldNotBe` "x"
+      b `shouldNotBe` "y"
+      a `shouldBe` c
+      b `shouldBe` d
+      b `shouldBe` e
+      a `shouldNotBe` b
 
     it "handles nested let variable in variable definition" $ do
       ast <- snailToAst "(let (x (let (x 10) x)) x)"
       ast `shouldBe` Let "x" (Let "x" (AstInt 10) (Var "x")) (Var "x")
 
+      (a, b, c, d) <-
+        runUniquify ast >>= \case
+          Let a (Let b (AstInt 10) (Var c)) (Var d) -> pure (a, b, c, d)
+          _ -> assertFailure "Unable to parse resulting AST"
+
+      a `shouldNotBe` "x"
+      b `shouldNotBe` "x"
+      a `shouldBe` d
+      b `shouldBe` c
+      b `shouldNotBe` a
+
     it "handles unused let variable in variable definition" $ do
       ast <- snailToAst "(let (x (let (y 10) x)) x)"
       ast `shouldBe` Let "x" (Let "y" (AstInt 10) (Var "x")) (Var "x")
+
+      (a, b, c, d) <-
+        runUniquify ast >>= \case
+          Let a (Let b (AstInt 10) (Var c)) (Var d) -> pure (a, b, c, d)
+          _ -> assertFailure "Unable to parse resulting AST"
+
+      a `shouldNotBe` "x"
+      b `shouldNotBe` "y"
+      c `shouldNotBe` "x"
+      c `shouldNotBe` a
+      a `shouldBe` d
 
 snailToAst :: Text -> IO Ast
 snailToAst input = do

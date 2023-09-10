@@ -6,13 +6,13 @@ import Control.Monad.Except
 import Control.Monad.Log
 import Control.Monad.Random
 import Control.Monad.Reader
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Prettyprinter
 import Snail
 import Text.Read (readMaybe)
-import Data.Map.Strict (Map)
-import Data.Map.Strict qualified as Map
 
 {- | The AST for $\mathcal{L}_\mathrm{var}$
 
@@ -86,11 +86,12 @@ fromSnail = \case
     logSnailAst "Expression of expression" expr
     fromSnail . unwrap . SExpression c b $ unwrap <$> exprs
 
+-- | Returns random characters in the alphabet either upper or lower case
 randomChar :: (MonadRandom m) => m Char
-randomChar = getRandomR ('a', 'z')
+randomChar = uniform $ ['a' .. 'z'] <> ['A' .. 'Z']
 
-uniqueVariable :: (MonadRandom m) => m Text
-uniqueVariable = Text.pack <$> replicateM 10 randomChar
+uniqueName :: (MonadRandom m) => m Text
+uniqueName = Text.pack <$> replicateM 10 randomChar
 
 type RenameMap = Map Text Text
 
@@ -106,13 +107,13 @@ uniquify = \case
   -- recursive cases, uniqueness matters
   Var x -> do
     renameMap <- ask
-    pure . Var $ Map.findWithDefault x x renameMap
+    name <- uniqueName -- if unable to find binding, generate a new unique name
+    pure . Var $ Map.findWithDefault name x renameMap
   Let x expr body -> do
-    uniqueX <- uniqueVariable
-    local (Map.insert x uniqueX) $ do
-      uniqueBody <- uniquify body
-      uniqueExpr <- uniquify expr
-      pure $ Let uniqueX uniqueExpr uniqueBody
+    uniqueX <- uniqueName
+    uniqueExpr <- uniquify expr -- can't use variable in definition
+    uniqueBody <- local (Map.insert x uniqueX) $ uniquify body
+    pure $ Let uniqueX uniqueExpr uniqueBody
 
 requestInteger :: (MonadIO m) => m Integer
 requestInteger = do

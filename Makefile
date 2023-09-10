@@ -18,6 +18,11 @@ format-nix:
 
 format: format-nix format-haskell
 
+ghci: hpack
+	cabal --ghc-options='${GHC_OPTIONS}' repl
+
+repl: ghci
+
 ghcid: hpack
 	ghcid -c "cabal --ghc-options='${GHC_OPTIONS}' repl"
 
@@ -30,4 +35,4 @@ hlint: hpack
 clean: hpack
 	cabal clean
 
-.PHONY: build hpack test run format-haskell format-nix format ghcid ghcid-test hlint
+.PHONY: build hpack test run format-haskell format-nix format ghci repl ghcid ghcid-test hlint
