@@ -21,8 +21,10 @@ library
   hs-source-dirs:
       src
   default-extensions:
+      BlockArguments
       DeriveGeneric
       DerivingStrategies
+      FlexibleContexts
       ImportQualifiedPost
       LambdaCase
       OverloadedStrings
@@ -47,8 +49,10 @@ executable essentialsOfCompilation
   hs-source-dirs:
       app
   default-extensions:
+      BlockArguments
       DeriveGeneric
       DerivingStrategies
+      FlexibleContexts
       ImportQualifiedPost
       LambdaCase
       OverloadedStrings
@@ -78,8 +82,10 @@ test-suite essentialsOfCompilation-test
   hs-source-dirs:
       test
   default-extensions:
+      BlockArguments
       DeriveGeneric
       DerivingStrategies
+      FlexibleContexts
       ImportQualifiedPost
       LambdaCase
       OverloadedStrings

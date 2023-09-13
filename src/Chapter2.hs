@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 module Chapter2 where
 
 import Control.Monad.Except
@@ -112,6 +110,22 @@ uniquify = \case
     uniqueExpr <- uniquify expr -- can't use variable in definition
     uniqueBody <- local (Map.insert x uniqueX) $ uniquify body
     pure $ Let uniqueX uniqueExpr uniqueBody
+
+removeComplexOperands :: (MonadLog (WithSeverity (Doc ann)) m, RandomGen g) => Ast -> RandT g m Ast
+removeComplexOperands = \case
+  -- atomic expressions in
+  x@(AstInt _) -> pure x
+  x@(Var _) -> pure x
+  -- TODO: Should this always be the case?
+  Read -> do
+    name <- uniqueName
+    pure $ Let name Read (Var name)
+
+  -- Expressions which may be complex
+  x@(Let _x _definition _body) -> pure x
+  x@(Operation _op _asts) -> pure x
+  -- Simple recursive case
+  Program info ast -> Program info <$> removeComplexOperands ast
 
 requestInteger :: (MonadIO m) => m Integer
 requestInteger = do

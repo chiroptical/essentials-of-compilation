@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 module Chapter1 where
 
 import Control.Monad.Except

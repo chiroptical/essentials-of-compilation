@@ -10,21 +10,21 @@ import Test.Hspec
 
 spec :: Spec
 spec = do
-  describe "AST" $ do
-    it "handles singly nested let" $ do
+  describe "AST" do
+    it "handles singly nested let" do
       ast <- snailToAst "(program () (+ (let (x 10) x) 10))"
       ast
         `shouldBe` Program
           (Info $ SExpression Nothing Round [])
           (Operation "+" [Let "x" (AstInt 10) (Var "x"), AstInt 10])
-    it "handles doubly nested let" $ do
+    it "handles doubly nested let" do
       ast <- snailToAst "(program () (let (x 32) (+ (let (x 10) x) x)))"
       ast
         `shouldBe` Program
           (Info $ SExpression Nothing Round [])
           (Let "x" (AstInt 32) (Operation "+" [Let "x" (AstInt 10) (Var "x"), Var "x"]))
-  describe "Exercise 2.2" $ do
-    it "handles singly nested let" $ do
+  describe "Exercise 2.2" do
+    it "handles singly nested let" do
       ast <- snailToAst "(let (x 10) x)"
       ast `shouldBe` Let "x" (AstInt 10) (Var "x")
       (x, y) <-
@@ -34,7 +34,7 @@ spec = do
       x `shouldNotBe` "x"
       x `shouldBe` y
 
-    it "handles doubly nested let" $ do
+    it "handles doubly nested let" do
       ast <- snailToAst "(let (x 10) (+ (let (x 10) x) x))"
       ast `shouldBe` Let "x" (AstInt 10) (Operation "+" [Let "x" (AstInt 10) (Var "x"), Var "x"])
       (a, b, c, d) <-
@@ -52,7 +52,7 @@ spec = do
       -- The inner variables should match
       b `shouldBe` c
 
-    it "handles let nested in body" $ do
+    it "handles let nested in body" do
       ast <- snailToAst "(let (x 10) (let (x 5) (+ x x)))"
       ast `shouldBe` Let "x" (AstInt 10) (Let "x" (AstInt 5) (Operation "+" [Var "x", Var "x"]))
 
@@ -70,7 +70,7 @@ spec = do
       b `shouldBe` c
       b `shouldBe` d
 
-    it "handles reassigned variable in body" $ do
+    it "handles reassigned variable in body" do
       ast <- snailToAst "(let (x 10) (let (y x) (+ y y))) "
       ast `shouldBe` Let "x" (AstInt 10) (Let "y" (Var "x") (Operation "+" [Var "y", Var "y"]))
 
@@ -89,7 +89,7 @@ spec = do
       b `shouldBe` d
       b `shouldBe` e
 
-    it "handles nested let variable in variable definition" $ do
+    it "handles nested let variable in variable definition" do
       ast <- snailToAst "(let (x (let (x 10) x)) x)"
       ast `shouldBe` Let "x" (Let "x" (AstInt 10) (Var "x")) (Var "x")
 
@@ -107,7 +107,7 @@ spec = do
       a `shouldBe` d
       b `shouldBe` c
 
-    it "handles unused let variable in variable definition" $ do
+    it "handles unused let variable in variable definition" do
       ast <- snailToAst "(let (x (let (y 10) x)) x)"
       ast `shouldBe` Let "x" (Let "y" (AstInt 10) (Var "x")) (Var "x")
 
@@ -124,6 +124,26 @@ spec = do
       c `shouldNotBe` a
       -- The correct variable used in the body
       a `shouldBe` d
+
+  describe "Exercise 2.3" do
+    it "handles simple read case" do
+      ast <- snailToAst "(read)"
+      ast `shouldBe` Read
+
+      let program = evalRandT (removeComplexOperands ast) $ mkStdGen 2023
+      (x, y) <-
+        runM program >>= \case
+          Right (Let x Read (Var y)) -> pure (x, y)
+          _ -> assertFailure "Unable to parse snail program"
+      x `shouldBe` y
+
+    it "handles first example on page 28" do
+      ast <- snailToAst "(+ 42 (- 10))"
+      ast `shouldBe` Operation "+" [AstInt 42, Operation "-" [AstInt 10]]
+
+    it "handles second example on page 28" do
+      ast <- snailToAst "(let (a 42) (let (b a) b))"
+      ast `shouldBe` Let "a" (AstInt 42) (Let "b" (Var "a") (Var "b"))
 
 snailToAst :: Text -> IO Ast
 snailToAst input = do

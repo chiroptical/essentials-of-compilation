@@ -9,14 +9,14 @@ import Test.Hspec
 
 spec :: Spec
 spec = do
-  describe "partial evaluation followed by interpreter" $ do
-    it "first" $ do
+  describe "partial evaluation followed by interpreter" do
+    it "first" do
       ast <- snailToAst "(program () (+ 10 (- (+ 5 3))))"
       ast `evaluationShouldBe` 2
-    it "second" $ do
+    it "second" do
       ast <- snailToAst "(program () (+ 1 (+ 3 1)))"
       ast `evaluationShouldBe` 5
-    it "third" $ do
+    it "third" do
       ast <- snailToAst "(program () (- (+ 3 (- 5))))"
       ast `evaluationShouldBe` 2
 
