@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
+
 module Chapter2Spec (spec) where
 
 import Chapter2
@@ -16,13 +18,13 @@ spec = do
       ast
         `shouldBe` Program
           (Info $ SExpression Nothing Round [])
-          (Operation "+" [Let "x" (AstInt 10) (Var "x"), AstInt 10])
+          (Plus (Let "x" (AstInt 10) (Var "x")) (AstInt 10))
     it "handles doubly nested let" do
       ast <- snailToAst "(program () (let (x 32) (+ (let (x 10) x) x)))"
       ast
         `shouldBe` Program
           (Info $ SExpression Nothing Round [])
-          (Let "x" (AstInt 32) (Operation "+" [Let "x" (AstInt 10) (Var "x"), Var "x"]))
+          (Let "x" (AstInt 32) (Plus (Let "x" (AstInt 10) (Var "x")) (Var "x")))
   describe "Exercise 2.2" do
     it "handles singly nested let" do
       ast <- snailToAst "(let (x 10) x)"
@@ -36,10 +38,10 @@ spec = do
 
     it "handles doubly nested let" do
       ast <- snailToAst "(let (x 10) (+ (let (x 10) x) x))"
-      ast `shouldBe` Let "x" (AstInt 10) (Operation "+" [Let "x" (AstInt 10) (Var "x"), Var "x"])
+      ast `shouldBe` Let "x" (AstInt 10) (Plus (Let "x" (AstInt 10) (Var "x")) (Var "x"))
       (a, b, c, d) <-
         runUniquify ast >>= \case
-          Let a (AstInt 10) (Operation "+" [Let b (AstInt 10) (Var c), Var d]) -> pure (a, b, c, d)
+          Let a (AstInt 10) (Plus (Let b (AstInt 10) (Var c)) (Var d)) -> pure (a, b, c, d)
           _ -> assertFailure "Unable to parse resulting AST"
 
       -- The variables should be new names
@@ -54,11 +56,11 @@ spec = do
 
     it "handles let nested in body" do
       ast <- snailToAst "(let (x 10) (let (x 5) (+ x x)))"
-      ast `shouldBe` Let "x" (AstInt 10) (Let "x" (AstInt 5) (Operation "+" [Var "x", Var "x"]))
+      ast `shouldBe` Let "x" (AstInt 10) (Let "x" (AstInt 5) (Plus (Var "x") (Var "x")))
 
       (a, b, c, d) <-
         runUniquify ast >>= \case
-          Let a (AstInt 10) (Let b (AstInt 5) (Operation "+" [Var c, Var d])) -> pure (a, b, c, d)
+          Let a (AstInt 10) (Let b (AstInt 5) (Plus (Var c) (Var d))) -> pure (a, b, c, d)
           _ -> assertFailure "Unable to parse resulting AST"
 
       -- The variables should have new names
@@ -72,11 +74,11 @@ spec = do
 
     it "handles reassigned variable in body" do
       ast <- snailToAst "(let (x 10) (let (y x) (+ y y))) "
-      ast `shouldBe` Let "x" (AstInt 10) (Let "y" (Var "x") (Operation "+" [Var "y", Var "y"]))
+      ast `shouldBe` Let "x" (AstInt 10) (Let "y" (Var "x") (Plus (Var "y") (Var "y")))
 
       (a, b, c, d, e) <-
         runUniquify ast >>= \case
-          Let a (AstInt 10) (Let b (Var c) (Operation "+" [Var d, Var e])) -> pure (a, b, c, d, e)
+          Let a (AstInt 10) (Let b (Var c) (Plus (Var d) (Var e))) -> pure (a, b, c, d, e)
           _ -> assertFailure "Unable to parse resulting AST"
 
       -- The variables should have new names
@@ -126,24 +128,31 @@ spec = do
       a `shouldBe` d
 
   describe "Exercise 2.3" do
-    it "handles simple read case" do
+    it "handles read as a primitive expression" do
       ast <- snailToAst "(read)"
       ast `shouldBe` Read
-
       let program = evalRandT (removeComplexOperands ast) $ mkStdGen 2023
-      (x, y) <-
-        runM program >>= \case
-          Right (Let x Read (Var y)) -> pure (x, y)
-          _ -> assertFailure "Unable to parse snail program"
-      x `shouldBe` y
+      runM program >>= \case
+        Right expr -> expr `shouldBe` ast
+        Left failure -> assertFailure failure
 
-    it "handles first example on page 28" do
+    it "makes the expression non-complex (page 28)" do
       ast <- snailToAst "(+ 42 (- 10))"
-      ast `shouldBe` Operation "+" [AstInt 42, Operation "-" [AstInt 10]]
+      ast `shouldBe` Plus (AstInt 42) (Minus (AstInt 10))
+      let program = evalRandT (removeComplexOperands ast) $ mkStdGen 2023
+      runM program >>= \case
+        Left failure -> assertFailure failure
+        Right expr -> do
+          let (Let v0 (AstInt 10) (Plus (AstInt 42) (Var v1))) = expr
+          v0 `shouldBe` v1
 
-    it "handles second example on page 28" do
+    it "doesn't need to change the program (page 28)" do
       ast <- snailToAst "(let (a 42) (let (b a) b))"
       ast `shouldBe` Let "a" (AstInt 42) (Let "b" (Var "a") (Var "b"))
+      let program = evalRandT (removeComplexOperands ast) $ mkStdGen 2023
+      runM program >>= \case
+        Left failure -> assertFailure failure
+        Right expr -> expr `shouldBe` ast
 
 snailToAst :: Text -> IO Ast
 snailToAst input = do

@@ -21,7 +21,8 @@ data Ast
   = AstInt Integer
   | Read
   | Program Info Ast
-  | Operation Text [Ast]
+  | Plus Ast Ast
+  | Minus Ast
   | Let Text Ast Ast
   | Var Text
   deriving stock (Eq, Show)
@@ -53,17 +54,17 @@ fromSnail = \case
   -- no text literals are supported in this language
   TextLiteral _ -> throwError TextLiteralUnsupported
   -- `(- X)` where X is an integer or an S-expression
-  SExpression _ _ [Lexeme (_, op@"-"), arg] -> do
+  SExpression _ _ [Lexeme (_, "-"), arg] -> do
     logSnailAst "Op -" arg
     operand <- fromSnail arg
-    pure $ Operation op [operand]
+    pure $ Minus operand
   -- `(+ X Y)` where X and Y are an integer or an S-expression
-  SExpression _ _ [Lexeme (_, op@"+"), leftOp, rightOp] -> do
+  SExpression _ _ [Lexeme (_, "+"), leftOp, rightOp] -> do
     logSnailAst "Op + Left" leftOp
     left <- fromSnail leftOp
     logSnailAst "Op + Right" rightOp
     right <- fromSnail rightOp
-    pure $ Operation op [left, right]
+    pure $ Plus left right
   SExpression _ _ [Lexeme (_, "let"), SExpression _ _ [Lexeme (_, name), binding], expr] -> do
     logSnailAst "Let binding" binding
     bin <- fromSnail binding
@@ -99,7 +100,8 @@ uniquify = \case
   x@Read -> pure x
   -- recursive cases, but no uniqueness to deal with
   Program info ast -> Program info <$> uniquify ast
-  Operation op asts -> Operation op <$> traverse uniquify asts
+  Plus x y -> Plus <$> uniquify x <*> uniquify y
+  Minus x -> Minus <$> uniquify x
   -- recursive cases, uniqueness matters
   Var x -> do
     renameMap <- ask
@@ -111,19 +113,35 @@ uniquify = \case
     uniqueBody <- local (Map.insert x uniqueX) $ uniquify body
     pure $ Let uniqueX uniqueExpr uniqueBody
 
+{- | This function forces 'Plus' or 'Minus's to act only on 'AstInt' or 'Var'
+
+(let (x (+ 42 (- 10))) (+ x 10))
+        ^^^^^^^^^^^^^
+This is not allowed because (- 10) is an operation.
+It needs to be (let (tmp (- 10)) (+ 42 tmp))
+-}
 removeComplexOperands :: (MonadLog (WithSeverity (Doc ann)) m, RandomGen g) => Ast -> RandT g m Ast
 removeComplexOperands = \case
-  -- atomic expressions in
+  -- atomic
   x@(AstInt _) -> pure x
   x@(Var _) -> pure x
-  -- TODO: Should this always be the case?
-  Read -> do
-    name <- uniqueName
-    pure $ Let name Read (Var name)
+  -- atomic expression
+  Read -> pure Read
+  -- A 'Let' expresssion may be complex, but we don't need to adjust the outer expression
+  Let v definition body ->
+    Let v
+      <$> removeComplexOperands definition
+      <*> removeComplexOperands body
+  -- An 'Operation' expression may be complex and may need to be converted into
+  -- a 'Let' expression
+  Plus x y -> do
+    x' <- removeComplexOperands x
+    y' <- removeComplexOperands y
+    pure $ Plus x' y'
+  Minus x -> do
+    x' <- removeComplexOperands x
+    pure $ Minus x'
 
-  -- Expressions which may be complex
-  x@(Let _x _definition _body) -> pure x
-  x@(Operation _op _asts) -> pure x
   -- Simple recursive case
   Program info ast -> Program info <$> removeComplexOperands ast
 
@@ -152,8 +170,5 @@ interpreter = \case
   Program _ program -> interpreter program
   Let {} -> throwError NotImplementedYet
   Var {} -> throwError NotImplementedYet
-  ast@(Operation op operands) ->
-    case (op, operands) of
-      ("+", [x, y]) -> (+) <$> interpreter x <*> interpreter y
-      ("-", [x]) -> negate <$> interpreter x
-      _ -> throwError $ InvalidOperation ast
+  Plus x y -> (+) <$> interpreter x <*> interpreter y
+  Minus x -> negate <$> interpreter x
