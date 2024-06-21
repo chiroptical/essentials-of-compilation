@@ -22,7 +22,8 @@ data Ast
   | Read
   | Program Info Ast
   | Plus Ast Ast
-  | Minus Ast
+  | UnaryMinus Ast
+  | BinaryMinus Ast Ast
   | Let Text Ast Ast
   | Var Text
   deriving stock (Eq, Show)
@@ -57,7 +58,14 @@ fromSnail = \case
   SExpression _ _ [Lexeme (_, "-"), arg] -> do
     logSnailAst "Op -" arg
     operand <- fromSnail arg
-    pure $ Minus operand
+    pure $ UnaryMinus operand
+  -- `(- X)` where X is an integer or an S-expression
+  SExpression _ _ [Lexeme (_, "-"), leftOp, rightOp] -> do
+    logSnailAst "Op - Left" leftOp
+    left <- fromSnail leftOp
+    logSnailAst "Op - Right" rightOp
+    right <- fromSnail rightOp
+    pure $ BinaryMinus left right
   -- `(+ X Y)` where X and Y are an integer or an S-expression
   SExpression _ _ [Lexeme (_, "+"), leftOp, rightOp] -> do
     logSnailAst "Op + Left" leftOp
@@ -101,7 +109,8 @@ uniquify = \case
   -- recursive cases, but no uniqueness to deal with
   Program info ast -> Program info <$> uniquify ast
   Plus x y -> Plus <$> uniquify x <*> uniquify y
-  Minus x -> Minus <$> uniquify x
+  UnaryMinus x -> UnaryMinus <$> uniquify x
+  BinaryMinus x y -> BinaryMinus <$> uniquify x <*> uniquify y
   -- recursive cases, uniqueness matters
   Var x -> do
     renameMap <- ask
@@ -138,9 +147,13 @@ removeComplexOperands = \case
     x' <- removeComplexOperands x
     y' <- removeComplexOperands y
     pure $ Plus x' y'
-  Minus x -> do
+  UnaryMinus x -> do
     x' <- removeComplexOperands x
-    pure $ Minus x'
+    pure $ UnaryMinus x'
+  BinaryMinus x y -> do
+    x' <- removeComplexOperands x
+    y' <- removeComplexOperands y
+    pure $ BinaryMinus x' y'
 
   -- Simple recursive case
   Program info ast -> Program info <$> removeComplexOperands ast
@@ -171,4 +184,5 @@ interpreter = \case
   Let {} -> throwError NotImplementedYet
   Var {} -> throwError NotImplementedYet
   Plus x y -> (+) <$> interpreter x <*> interpreter y
-  Minus x -> negate <$> interpreter x
+  UnaryMinus x -> negate <$> interpreter x
+  BinaryMinus x y -> (-) <$> interpreter x <*> interpreter y

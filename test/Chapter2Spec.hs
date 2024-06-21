@@ -138,7 +138,7 @@ spec = do
 
     it "makes the expression non-complex (page 28)" do
       ast <- snailToAst "(+ 42 (- 10))"
-      ast `shouldBe` Plus (AstInt 42) (Minus (AstInt 10))
+      ast `shouldBe` Plus (AstInt 42) (UnaryMinus (AstInt 10))
       let program = evalRandT (removeComplexOperands ast) $ mkStdGen 2023
       runM program >>= \case
         Left failure -> assertFailure failure
