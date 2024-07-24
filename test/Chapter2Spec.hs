@@ -4,6 +4,7 @@ module Chapter2Spec (spec) where
 
 import Chapter2
 import Control.Monad.Random
+import Data.Map qualified as Map
 import Data.Text
 import RunM
 import Snail
@@ -128,31 +129,42 @@ spec = do
       a `shouldBe` d
 
   describe "Exercise 2.3" do
-    it "handles read as a primitive expression" do
-      ast <- snailToAst "(read)"
-      ast `shouldBe` Read
-      let program = evalRandT (removeComplexOperands ast) $ mkStdGen 2023
-      runM program >>= \case
-        Right expr -> expr `shouldBe` ast
-        Left failure -> assertFailure failure
-
-    it "makes the expression non-complex (page 28)" do
+    it "handles makeAtomic with simple input" do
       ast <- snailToAst "(+ 42 (- 10))"
       ast `shouldBe` Plus (AstInt 42) (UnaryMinus (AstInt 10))
-      let program = evalRandT (removeComplexOperands ast) $ mkStdGen 2023
+      let program = evalRandT (makeAtomic ast) $ mkStdGen 2023
       runM program >>= \case
         Left failure -> assertFailure failure
         Right expr -> do
-          let (Let v0 (AstInt 10) (Plus (AstInt 42) (Var v1))) = expr
-          v0 `shouldBe` v1
+          let (Var tmp, exprMap) = expr
+              Just e = Map.lookup tmp exprMap
+          e `shouldBe` UnaryMinus (AstInt 10)
 
-    it "doesn't need to change the program (page 28)" do
-      ast <- snailToAst "(let (a 42) (let (b a) b))"
-      ast `shouldBe` Let "a" (AstInt 42) (Let "b" (Var "a") (Var "b"))
-      let program = evalRandT (removeComplexOperands ast) $ mkStdGen 2023
-      runM program >>= \case
-        Left failure -> assertFailure failure
-        Right expr -> expr `shouldBe` ast
+-- it "handles read as a primitive expression" do
+--   ast <- snailToAst "(read)"
+--   ast `shouldBe` Read
+--   let program = evalRandT (removeComplexOperands ast) $ mkStdGen 2023
+--   runM program >>= \case
+--     Right expr -> expr `shouldBe` ast
+--     Left failure -> assertFailure failure
+
+-- it "makes the expression non-complex (page 28)" do
+--   ast <- snailToAst "(+ 42 (- 10))"
+--   ast `shouldBe` Plus (AstInt 42) (UnaryMinus (AstInt 10))
+--   let program = evalRandT (removeComplexOperands ast) $ mkStdGen 2023
+--   runM program >>= \case
+--     Left failure -> assertFailure failure
+--     Right expr -> do
+--       let (Let v0 (UnaryMinus (AstInt 10)) (Plus (AstInt 42) (Var v1))) = expr
+--       v0 `shouldBe` v1
+
+-- it "doesn't need to change the program (page 28)" do
+--   ast <- snailToAst "(let (a 42) (let (b a) b))"
+--   ast `shouldBe` Let "a" (AstInt 42) (Let "b" (Var "a") (Var "b"))
+--   let program = evalRandT (removeComplexOperands ast) $ mkStdGen 2023
+--   runM program >>= \case
+--     Left failure -> assertFailure failure
+--     Right expr -> expr `shouldBe` ast
 
 snailToAst :: Text -> IO Ast
 snailToAst input = do

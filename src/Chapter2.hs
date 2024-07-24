@@ -122,6 +122,14 @@ uniquify = \case
     uniqueBody <- local (Map.insert x uniqueX) $ uniquify body
     pure $ Let uniqueX uniqueExpr uniqueBody
 
+makeAtomic ::
+  (MonadLog (WithSeverity (Doc ann)) m, RandomGen g) => Ast -> RandT g m (Ast, Map Text Ast)
+makeAtomic = error "..."
+
+makeExpression ::
+  (MonadLog (WithSeverity (Doc ann)) m, RandomGen g) => Ast -> RandT g m Ast
+makeExpression = error "..."
+
 {- | This function forces 'Plus' or 'Minus's to act only on 'AstInt' or 'Var'
 
 (let (x (+ 42 (- 10))) (+ x 10))
@@ -129,7 +137,8 @@ uniquify = \case
 This is not allowed because (- 10) is an operation.
 It needs to be (let (tmp (- 10)) (+ 42 tmp))
 -}
-removeComplexOperands :: (MonadLog (WithSeverity (Doc ann)) m, RandomGen g) => Ast -> RandT g m Ast
+removeComplexOperands ::
+  (MonadLog (WithSeverity (Doc ann)) m, RandomGen g) => Ast -> RandT g m Ast
 removeComplexOperands = \case
   -- atomic
   x@(AstInt _) -> pure x
