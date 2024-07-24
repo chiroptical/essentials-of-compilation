@@ -1,9 +1,13 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Chapter2 where
 
 import Control.Monad.Except
 import Control.Monad.Log
 import Control.Monad.Random
 import Control.Monad.Reader
+import Control.Monad.State
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -122,6 +126,84 @@ uniquify = \case
     uniqueBody <- local (Map.insert x uniqueX) $ uniquify body
     pure $ Let uniqueX uniqueExpr uniqueBody
 
+-- | 'AstInt', 'Read', 'Var' are all simple atomic expressions
+isSimpleAtomicExpression :: Ast -> Bool
+isSimpleAtomicExpression = \case
+  AstInt {} -> True
+  Read -> True
+  Var {} -> True
+  UnaryMinus {} -> False
+  Plus {} -> False
+  BinaryMinus {} -> False
+  Let {} -> False
+  Program {} -> False
+
+{- | An expression is atomic when each component is atomic. 'AstInt', 'Read',
+'Var' are all atomic expressions. 'UnaryMinus' is atomic when it's argument
+is atomic.
+-}
+isAtomic :: Ast -> Bool
+isAtomic = \case
+  AstInt {} -> True
+  Read -> True
+  Var {} -> True
+  UnaryMinus x -> isSimpleAtomicExpression x
+  Plus x y -> isSimpleAtomicExpression x && isSimpleAtomicExpression y
+  BinaryMinus x y -> isSimpleAtomicExpression x && isSimpleAtomicExpression y
+  Let _x expr body -> isSimpleAtomicExpression expr && isSimpleAtomicExpression body
+  Program _info ast -> isSimpleAtomicExpression ast
+
+single ::
+  (MonadLog (WithSeverity (Doc ann)) m, MonadState [(Text, Ast)] m, RandomGen g) =>
+  Ast ->
+  RandT g m Ast
+single x = do
+  if isSimpleAtomicExpression x
+    then pure x
+    else do
+      name <- uniqueName
+      newX <- makeAtomic x
+      modify $ \s -> [(name, newX)] <> s
+      pure $ Var name
+
+makeAtomic ::
+  forall m g ann.
+  (MonadLog (WithSeverity (Doc ann)) m, MonadState [(Text, Ast)] m, RandomGen g) =>
+  Ast ->
+  RandT g m Ast
+makeAtomic = \case
+  -- No state changes needed
+  x@(AstInt _) -> pure x
+  x@Read -> pure x
+  x@(Var _) -> pure x
+  -- May require state changes if not atomic
+  expr@(Plus x y) ->
+    if isAtomic expr
+      then pure expr
+      else do
+        newX <- single x
+        newY <- single y
+        pure $ Plus newX newY
+  expr@(UnaryMinus x) ->
+    if isAtomic expr
+      then pure expr
+      else do
+        newX <- single x
+        pure $ UnaryMinus newX
+  BinaryMinus x y -> do
+    newX <- single x
+    newY <- single y
+    pure $ BinaryMinus newX newY
+
+  -- May require state changes if not atomic
+  Let x expr body -> do
+    newExpr <- single expr
+    newBody <- single body
+    pure $ Let x newExpr newBody
+  Program info ast -> do
+    newAst <- single ast
+    pure $ Program info newAst
+
 {- | This function forces 'Plus' or 'Minus's to act only on 'AstInt' or 'Var'
 
 (let (x (+ 42 (- 10))) (+ x 10))
@@ -129,34 +211,17 @@ uniquify = \case
 This is not allowed because (- 10) is an operation.
 It needs to be (let (tmp (- 10)) (+ 42 tmp))
 -}
-removeComplexOperands :: (MonadLog (WithSeverity (Doc ann)) m, RandomGen g) => Ast -> RandT g m Ast
-removeComplexOperands = \case
-  -- atomic
-  x@(AstInt _) -> pure x
-  x@(Var _) -> pure x
-  -- atomic expression
-  Read -> pure Read
-  -- A 'Let' expresssion may be complex, but we don't need to adjust the outer expression
-  Let v definition body ->
-    Let v
-      <$> removeComplexOperands definition
-      <*> removeComplexOperands body
-  -- An 'Operation' expression may be complex and may need to be converted into
-  -- a 'Let' expression
-  Plus x y -> do
-    x' <- removeComplexOperands x
-    y' <- removeComplexOperands y
-    pure $ Plus x' y'
-  UnaryMinus x -> do
-    x' <- removeComplexOperands x
-    pure $ UnaryMinus x'
-  BinaryMinus x y -> do
-    x' <- removeComplexOperands x
-    y' <- removeComplexOperands y
-    pure $ BinaryMinus x' y'
-
-  -- Simple recursive case
-  Program info ast -> Program info <$> removeComplexOperands ast
+removeComplexOperands ::
+  (MonadLog (WithSeverity (Doc ann)) m) => Ast -> m Ast
+removeComplexOperands ast = do
+  let st = flip runStateT []
+      program = st $ evalRandT (makeAtomic ast) $ mkStdGen 2023
+  (uncomplexAst, definitions) :: (Ast, [(Text, Ast)]) <- program
+  if null definitions
+    then pure uncomplexAst
+    else do
+      -- TODO: Need to re-assemble the definitions into 'Let's
+      pure uncomplexAst
 
 requestInteger :: (MonadIO m) => m Integer
 requestInteger = do
