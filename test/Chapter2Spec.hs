@@ -4,6 +4,7 @@ module Chapter2Spec (spec) where
 
 import Chapter2
 import Control.Monad.Random
+import Control.Monad.State
 import Data.Map qualified as Map
 import Data.Text
 import RunM
@@ -132,13 +133,43 @@ spec = do
     it "handles makeAtomic with simple input" do
       ast <- snailToAst "(+ 42 (- 10))"
       ast `shouldBe` Plus (AstInt 42) (UnaryMinus (AstInt 10))
-      let program = evalRandT (makeAtomic ast) $ mkStdGen 2023
+      let st = flip runStateT Map.empty
+          program = st $ evalRandT (makeAtomic ast) $ mkStdGen 2023
       runM program >>= \case
         Left failure -> assertFailure failure
-        Right expr -> do
-          let (Var tmp, exprMap) = expr
-              Just e = Map.lookup tmp exprMap
+        Right (Plus _first (Var v), exprMap) -> do
+          let Just e = Map.lookup v exprMap
           e `shouldBe` UnaryMinus (AstInt 10)
+        Right _ -> assertFailure "Unable to match pattern"
+
+    it "handles makeAtomic with nested input" do
+      ast <- snailToAst "(- (- (- 10)))"
+      ast `shouldBe` UnaryMinus (UnaryMinus (UnaryMinus (AstInt 10)))
+      let st = flip runStateT Map.empty
+          program = st $ evalRandT (makeAtomic ast) $ mkStdGen 2023
+      runM program >>= \case
+        Left failure -> assertFailure failure
+        Right (UnaryMinus (UnaryMinus (Var x)), exprMap) -> do
+          let Just eX = Map.lookup x exprMap
+          eX `shouldBe` UnaryMinus (AstInt 10)
+        Right x -> do
+          print x
+          assertFailure "Unable to match pattern"
+
+    -- TODO: In theory, we should only have one temporary variable here
+    it "handles makeAtomic with duplicate input" do
+      ast <- snailToAst "(+ (- 10) (- 10))"
+      ast `shouldBe` Plus (UnaryMinus (AstInt 10)) (UnaryMinus (AstInt 10))
+      let st = flip runStateT Map.empty
+          program = st $ evalRandT (makeAtomic ast) $ mkStdGen 2023
+      runM program >>= \case
+        Left failure -> assertFailure failure
+        Right (Plus (Var x) (Var y), exprMap) -> do
+          let Just eX = Map.lookup x exprMap
+              Just eY = Map.lookup y exprMap
+          eX `shouldBe` UnaryMinus (AstInt 10)
+          eY `shouldBe` UnaryMinus (AstInt 10)
+        Right _ -> assertFailure "Unable to match pattern"
 
 -- it "handles read as a primitive expression" do
 --   ast <- snailToAst "(read)"

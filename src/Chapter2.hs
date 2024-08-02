@@ -1,9 +1,13 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Chapter2 where
 
 import Control.Monad.Except
 import Control.Monad.Log
 import Control.Monad.Random
 import Control.Monad.Reader
+import Control.Monad.State
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -122,9 +126,55 @@ uniquify = \case
     uniqueBody <- local (Map.insert x uniqueX) $ uniquify body
     pure $ Let uniqueX uniqueExpr uniqueBody
 
+isAtomic :: Ast -> Bool
+isAtomic =
+  \case
+    AstInt _ -> True
+    Read -> True
+    Var _ -> True
+    UnaryMinus _x -> False
+    Plus _x _y -> False
+    BinaryMinus _x _y -> False
+    Let _x expr body -> isAtomic expr && isAtomic body
+    Program _info ast -> isAtomic ast
+
+single ::
+  (MonadLog (WithSeverity (Doc ann)) m, MonadState (Map Text Ast) m, RandomGen g) =>
+  Ast ->
+  RandT g m Ast
+single x =
+  if isAtomic x
+    then pure x
+    else do
+      m <- get
+      name <- uniqueName
+      put $ Map.insert name x m
+      pure $ Var name
+
 makeAtomic ::
-  (MonadLog (WithSeverity (Doc ann)) m, RandomGen g) => Ast -> RandT g m (Ast, Map Text Ast)
-makeAtomic = error "..."
+  forall m g ann.
+  (MonadLog (WithSeverity (Doc ann)) m, MonadState (Map Text Ast) m, RandomGen g) =>
+  Ast ->
+  RandT g m Ast
+makeAtomic = \case
+  -- No state changes needed
+  x@(AstInt _) -> pure x
+  x@Read -> pure x
+  x@(Var _) -> pure x
+  -- May require state changes if not atomic
+  Plus x y -> do
+    newX <- single x
+    newY <- single y
+    pure $ Plus newX newY
+  UnaryMinus x -> UnaryMinus <$> single x
+  BinaryMinus x y -> do
+    newX <- single x
+    newY <- single y
+    pure $ BinaryMinus newX newY
+
+  -- May require state changes if not atomic
+  Let _x _expr _body -> error "..."
+  Program _info _ast -> error "..."
 
 makeExpression ::
   (MonadLog (WithSeverity (Doc ann)) m, RandomGen g) => Ast -> RandT g m Ast
