@@ -8,10 +8,12 @@ import Control.Monad.Log
 import Control.Monad.Random
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Foldable (foldl')
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Debug.Trace (traceM)
 import Prettyprinter
 import Snail
 import Text.Read (readMaybe)
@@ -51,6 +53,9 @@ parseLeaf = \case
 
 logSnailAst :: (MonadLog (WithSeverity (Doc ann)) m) => Text -> SnailAst -> m ()
 logSnailAst msg expr = logInfo . pretty $ msg <> ": " <> toText expr
+
+logAst :: (MonadLog (WithSeverity (Doc ann)) m) => Text -> Ast -> m ()
+logAst msg expr = logInfo . pretty $ msg <> ": " <> Text.pack (show expr)
 
 fromSnail :: (MonadLog (WithSeverity (Doc ann)) m, MonadError LangError m) => SnailAst -> m Ast
 fromSnail = \case
@@ -150,8 +155,11 @@ isAtomic = \case
   UnaryMinus x -> isSimpleAtomicExpression x
   Plus x y -> isSimpleAtomicExpression x && isSimpleAtomicExpression y
   BinaryMinus x y -> isSimpleAtomicExpression x && isSimpleAtomicExpression y
-  Let _x expr body -> isSimpleAtomicExpression expr && isSimpleAtomicExpression body
-  Program _info ast -> isSimpleAtomicExpression ast
+  Let _x expr body ->
+    -- If the expression bound to the variable is atomic and the entire body is
+    -- built of atomic expressions, the whole expression is atomic
+    isSimpleAtomicExpression expr && isAtomic body
+  Program _info ast -> isAtomic ast
 
 single ::
   (MonadLog (WithSeverity (Doc ann)) m, MonadState [(Text, Ast)] m, RandomGen g) =>
@@ -196,13 +204,25 @@ makeAtomic = \case
     pure $ BinaryMinus newX newY
 
   -- May require state changes if not atomic
-  Let x expr body -> do
-    newExpr <- single expr
-    newBody <- single body
-    pure $ Let x newExpr newBody
+  ast@(Let x expr body) -> do
+    if isAtomic ast
+      then do
+        traceM $ "isAtomic: " <> show ast
+        pure ast
+      else do
+        traceM $ "notAtomic: " <> show ast
+        newExpr <- single expr
+        newBody <- single body
+        pure $ Let x newExpr newBody
   Program info ast -> do
     newAst <- single ast
     pure $ Program info newAst
+
+buildAstFromNonComplexOperands :: (Ast, [(Text, Ast)]) -> Ast
+buildAstFromNonComplexOperands (ast, definitions) =
+  let f :: Ast -> (Text, Ast) -> Ast
+      f nonComplex (name, expr) = Let name expr nonComplex
+   in foldl' f ast definitions
 
 {- | This function forces 'Plus' or 'Minus's to act only on 'AstInt' or 'Var'
 
@@ -216,12 +236,8 @@ removeComplexOperands ::
 removeComplexOperands ast = do
   let st = flip runStateT []
       program = st $ evalRandT (makeAtomic ast) $ mkStdGen 2023
-  (uncomplexAst, definitions) :: (Ast, [(Text, Ast)]) <- program
-  if null definitions
-    then pure uncomplexAst
-    else do
-      -- TODO: Need to re-assemble the definitions into 'Let's
-      pure uncomplexAst
+  results :: (Ast, [(Text, Ast)]) <- program
+  pure $ buildAstFromNonComplexOperands results
 
 requestInteger :: (MonadIO m) => m Integer
 requestInteger = do

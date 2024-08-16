@@ -26,3 +26,11 @@ runMWith input program =
     flip runLoggingT (logToStdout . renderWithSeverity id) $
       runExceptT $
         runReaderT program input
+
+runLogM ::
+  (MonadIO m, MonadMask m) =>
+  LoggingT (WithSeverity (Doc ann)) m a ->
+  m a
+runLogM action =
+  withFDHandler defaultBatchingOptions stdout 0.4 80 $ \logToStdout ->
+    runLoggingT action (logToStdout . renderWithSeverity id)
