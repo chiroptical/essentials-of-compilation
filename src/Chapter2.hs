@@ -239,6 +239,45 @@ removeComplexOperands ast = do
   results :: (Ast, [(Text, Ast)]) <- program
   pure $ buildAstFromNonComplexOperands results
 
+-- | A 'CAst' can only be generated after you have run 'removeComplexOperands'
+-- from an 'Ast'. See 'explicateControl'.
+data CAst 
+  = CInt Integer 
+  | CVar Text
+  | CRead
+  | CUnaryMinus CAst
+  | CPlus CAst CAst
+  | CMinus CAst CAst
+  | CAssign Text CAst
+  | CReturn CAst
+  | CSeq CAst CAst
+  | CProgram Info (Map Text CAst)
+
+data CAstError
+  = UnableToConstructCAstWithoutProgram
+
+explicateTail :: 
+  (MonadLog (WithSeverity (Doc ann)) m) => Ast -> m CAst
+explicateTail _ast = pure $ CInt 42
+
+explicateAssign ::
+  (MonadLog (WithSeverity (Doc ann)) m) => Ast -> CAst -> m CAst
+explicateAssign _ast _cont = pure $ CInt 42
+
+isProgramAst :: Ast -> Bool
+isProgramAst = \case
+  Program {} -> True
+  _ -> False
+
+-- | This function should only ever be given an 'Ast' that 
+explicateControl ::
+  (MonadError CAstError m, MonadLog (WithSeverity (Doc ann)) m) => Ast -> m CAst
+explicateControl ast = do
+  nonComplexOperations <- removeComplexOperands ast
+  case nonComplexOperations of
+    Program _info _ast -> pure $ CInt 42
+    _ -> throwError UnableToConstructCAstWithoutProgram
+
 requestInteger :: (MonadIO m) => m Integer
 requestInteger = do
   liftIO $ putStrLn "Enter an integer"
