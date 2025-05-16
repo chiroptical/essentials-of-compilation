@@ -276,10 +276,9 @@ isProgramAst = \case
 explicateControl ::
   (MonadError CAstError m, MonadLog (WithSeverity (Doc ann)) m) => Ast -> m CAst
 explicateControl = \case
-  Program _info _ast -> pure $ CInt 42
   theAst -> do
-    logAst "explicateControl unexpected:" theAst
-    throwError UnableToConstructCAstWithoutProgram
+    logAst "explicateControl" theAst
+    pure $ CInt 42
 
 requestInteger :: (MonadIO m) => m Integer
 requestInteger = do
