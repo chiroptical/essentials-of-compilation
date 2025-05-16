@@ -238,6 +238,35 @@ spec = do
         nonComplexAst <- runLogM $ removeComplexOperands ast
         nonComplexAst `shouldBe` ast
 
+    describe "explicateControl" do
+      it "works..." do
+        ast <- snailToAst "(program () (let (y (let (x.1 20) (let (x.2 22) (+ x.1 x.2)))) (y)))"
+        ast
+          `shouldBe` Program
+            (Info $ SExpression Nothing Round [])
+            ( Let
+                "y"
+                ( Let
+                    "x.1"
+                    (AstInt 20)
+                    (Let "x.2" (AstInt 22) (Plus (Var "x.1") (Var "x.2")))
+                )
+                (Var "y")
+            )
+        cAst <- runM $ explicateControl ast
+        cAst
+          `shouldBe` Right
+            ( CSeq
+                (CAssign "x.1" (CInt 20))
+                ( CSeq
+                    (CAssign "x.2" (CInt 22))
+                    ( CSeq
+                        (CAssign "y" (CPlus (CVar "x.1") (CVar "x.2")))
+                        (CReturn (CVar "y"))
+                    )
+                )
+            )
+
 snailToAst :: Text -> IO Ast
 snailToAst input = do
   snail <-
