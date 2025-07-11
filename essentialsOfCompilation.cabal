@@ -13,6 +13,7 @@ build-type:     Simple
 library
   exposed-modules:
       Chapter1
+      Chapter2
       Chapter2Old
       Lib
       RunM
@@ -77,6 +78,7 @@ test-suite essentialsOfCompilation-test
   main-is: Spec.hs
   other-modules:
       Chapter1Spec
+      Chapter2OldSpec
       Chapter2Spec
       Paths_essentialsOfCompilation
   hs-source-dirs:

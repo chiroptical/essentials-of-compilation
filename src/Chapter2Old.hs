@@ -243,6 +243,7 @@ removeComplexOperands ast = do
 from an 'Ast'. See 'explicateControl'.
 -}
 data CAtomic = CInt Integer | CVar Text
+  deriving stock (Eq, Show)
 
 data CExpr
   = CAtom CAtomic
@@ -285,7 +286,7 @@ data CAstError
 --   ex@(Plus _l _r) -> do
 --       name <- uniqueName
 --       explicateAssign
---         (CReturn $ CVar name)      
+--         (CReturn $ CVar name)
 --         name
 --         ex
 --   UnaryMinus x ->
@@ -293,7 +294,7 @@ data CAstError
 --   BinaryMinus l r ->
 --     CMinus <$> explicateControl l <*> explicateControl r
 --   Program _info _ast ->
---     throwError UnableToExplicateTailForProgram 
+--     throwError UnableToExplicateTailForProgram
 
 -- explicateAssign ::
 --   (MonadError CAstError m
@@ -306,7 +307,7 @@ data CAstError
 --   Read -> pure CRead
 --   Program info ast -> CProgram info <$> explicateControl ast
 --   ex@(Plus l r) ->
---     explicateAssign 
+--     explicateAssign
 --     pure $ CSeq $ CAssign x () cont
 
 --   UnaryMinus x -> CUnaryMinus <$> explicateControl x
@@ -317,16 +318,16 @@ isProgramAst = \case
   Program {} -> True
   _ -> False
 
--- | This function should only ever be given an 'Ast' that
--- explicateControl ::
---   (MonadError CAstError m
---   , MonadLog (WithSeverity (Doc ann)) m, RandomGen g) => Ast ->
---   RandT g m CAst
--- explicateControl = \case
---   theAst -> do
---     lift $ logAst "explicateControl" theAst
---     pure $ CInt 42
-
+{- | This function should only ever be given an 'Ast' that
+explicateControl ::
+  (MonadError CAstError m
+  , MonadLog (WithSeverity (Doc ann)) m, RandomGen g) => Ast ->
+  RandT g m CAst
+explicateControl = \case
+  theAst -> do
+    lift $ logAst "explicateControl" theAst
+    pure $ CInt 42
+-}
 requestInteger :: (MonadIO m) => m Integer
 requestInteger = do
   liftIO $ putStrLn "Enter an integer"
