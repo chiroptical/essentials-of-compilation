@@ -276,3 +276,33 @@ data CTail
 newtype CLabel = CLabel Text
 
 data CVar = CProgram () CLabel CTail
+
+-- | Applies to 'LExpr' expressions in the tail position
+explicateTail :: LExpr -> CTail
+explicateTail = \case
+  LInt x -> CReturn $ CAtomic $ CInt x
+  LRead -> CReturn CRead
+  LUnaryMinus x -> _a
+  LPlus x y -> _a
+  LMinus x y -> _a
+  LVar x -> _a
+  LLet var x y -> _a
+
+-- | Applies to 'LExpr' expressions **not** in the tail position
+explicateAssign :: LExpr -> Text -> CTail -> CTail
+explicateAssign lexpr var tail = case lexpr of
+  LInt x -> CSeq (CAssign var (CAtomic $ CInt x)) tail
+  LRead -> _a
+  LUnaryMinus x -> _a
+  LPlus x y -> _a
+  LMinus x y -> _a
+  LVar x -> _a
+  LLet var x y -> _a
+
+isTailPosition :: LExpr -> Bool
+isTailPosition _ = False
+
+explicateControl :: LVar -> CVar
+explicateControl = \case
+  LProgram () lexpr ->
+    CProgram () (CLabel "...") _a
